@@ -7,6 +7,8 @@ use App\Filament\Resources\M002ControlResource\RelationManagers;
 use App\Models\M002Control;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -23,13 +25,34 @@ class M002ControlResource extends Resource
 
     protected static ?string $slug = 'control';
 
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist
+            ->schema([
+                TextEntry::make('iso.kode')
+                    ->label('ISO'),
+                TextEntry::make('iso.nama')
+                    ->label('Judul ISO'),
+                TextEntry::make('kode')
+                    ->label('Kode Control'),
+                TextEntry::make('nama')
+                    ->label('Control'),
+                TextEntry::make('keterangan')
+                    ->columnSpanFull(),
+            ]);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Select::make('iso_id')
-                    ->relationship('iso', 'id'),
-                Forms\Components\TextInput::make('nama'),
+                    ->label('ISO')
+                    ->relationship('iso', 'kode'),
+                Forms\Components\TextInput::make('nama')
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('kode')
+                    ->maxLength(255),
                 Forms\Components\Textarea::make('keterangan')
                     ->columnSpanFull(),
             ]);
@@ -40,10 +63,16 @@ class M002ControlResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('iso.kode')
-                    ->numeric()
+                    ->label('ISO')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('kode')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('nama')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('keterangan')
+                    ->searchable()
+                    ->visibleFrom("md")
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -59,7 +88,6 @@ class M002ControlResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -68,10 +96,20 @@ class M002ControlResource extends Resource
             ]);
     }
 
+    public static function getRelations(): array
+    {
+        return [
+            //
+        ];
+    }
+
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ManageM002Controls::route('/'),
+            'index' => Pages\ListM002Controls::route('/'),
+            'create' => Pages\CreateM002Control::route('/create'),
+            'view' => Pages\ViewM002Control::route('/{record}'),
+            'edit' => Pages\EditM002Control::route('/{record}/edit'),
         ];
     }
 }

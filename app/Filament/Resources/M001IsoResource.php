@@ -2,18 +2,19 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\M001IsoResource\Pages;
-use App\Filament\Resources\M001IsoResource\RelationManagers;
-use App\Models\M001Iso;
 use Filament\Forms;
+use Filament\Tables;
+use App\Models\M001Iso;
 use Filament\Forms\Form;
-use Filament\Infolists\Components\TextEntry;
+use Filament\Tables\Table;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists\Components\TextEntry;
+use App\Filament\Resources\M001IsoResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\M001IsoResource\RelationManagers;
+use App\Filament\Resources\M001IsoResource\RelationManagers\ControlRelationManager;
 
 class M001IsoResource extends Resource
 {
@@ -31,7 +32,7 @@ class M001IsoResource extends Resource
             ->schema([
                 TextEntry::make('nama'),
                 TextEntry::make('kode'),
-                TextEntry::make('keterangan'),
+                TextEntry::make('keterangan')->columnSpanFull(),
             ]);
     }
 
@@ -40,11 +41,11 @@ class M001IsoResource extends Resource
         return $form
             ->schema([
                 Forms\Components\TextInput::make('nama')
-                    ->required(),
+                    ->maxLength(255),
                 Forms\Components\TextInput::make('kode')
-                    ->required(),
-                Forms\Components\FileUpload::make('file')
-                    ,
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('file')
+                    ->maxLength(255),
                 Forms\Components\Textarea::make('keterangan')
                     ->columnSpanFull(),
             ]);
@@ -54,12 +55,16 @@ class M001IsoResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('nama')
-                    ->searchable(),
                 Tables\Columns\TextColumn::make('kode')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('nama')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('file')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('control_count')
+                    ->label('Control')
+                    ->alignRight()
+                    ->counts('control'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -75,7 +80,6 @@ class M001IsoResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -84,10 +88,20 @@ class M001IsoResource extends Resource
             ]);
     }
 
+    public static function getRelations(): array
+    {
+        return [
+            ControlRelationManager::class,
+        ];
+    }
+
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ManageM001Isos::route('/'),
+            'index' => Pages\ListM001Isos::route('/'),
+            'create' => Pages\CreateM001Iso::route('/create'),
+            'view' => Pages\ViewM001Iso::route('/{record}'),
+            'edit' => Pages\EditM001Iso::route('/{record}/edit'),
         ];
     }
 }

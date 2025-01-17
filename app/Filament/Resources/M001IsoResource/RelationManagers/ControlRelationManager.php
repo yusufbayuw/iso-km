@@ -34,8 +34,14 @@ class ControlRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('nama')
             ->columns([
-                Tables\Columns\TextColumn::make('kode'),
-                Tables\Columns\TextColumn::make('nama'),
+                Tables\Columns\TextColumn::make('kode')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('nama')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('keterangan')
+                    ->wrap()
+                    ->visibleFrom("md")
+                    ->searchable(),
             ])
             ->filters([
                 //

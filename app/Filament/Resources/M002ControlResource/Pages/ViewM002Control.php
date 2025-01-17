@@ -4,16 +4,16 @@ namespace App\Filament\Resources\M002ControlResource\Pages;
 
 use App\Filament\Resources\M002ControlResource;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
+use Filament\Resources\Pages\ViewRecord;
 
-class ManageM002Controls extends ManageRecords
+class ViewM002Control extends ViewRecord
 {
     protected static string $resource = M002ControlResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\EditAction::make(),
         ];
     }
 }

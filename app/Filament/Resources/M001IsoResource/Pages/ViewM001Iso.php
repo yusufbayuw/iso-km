@@ -4,16 +4,16 @@ namespace App\Filament\Resources\M001IsoResource\Pages;
 
 use App\Filament\Resources\M001IsoResource;
 use Filament\Actions;
-use Filament\Resources\Pages\ManageRecords;
+use Filament\Resources\Pages\ViewRecord;
 
-class ManageM001Isos extends ManageRecords
+class ViewM001Iso extends ViewRecord
 {
     protected static string $resource = M001IsoResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\EditAction::make(),
         ];
     }
 }

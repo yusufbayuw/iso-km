@@ -41,19 +41,21 @@ class M003DocumentResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('control.id')
-                    ->numeric()
+                Tables\Columns\TextColumn::make('control.kode')
+                    ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('nama')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('kode')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('keterangan')
-                    ->searchable(),
                 Tables\Columns\TextColumn::make('versi')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('file')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('keterangan')
+                    ->visibleFrom("md")
+                    ->searchable()
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
