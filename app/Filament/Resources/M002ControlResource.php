@@ -39,7 +39,7 @@ class M002ControlResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('iso.id')
+                Tables\Columns\TextColumn::make('iso.kode')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('nama')
