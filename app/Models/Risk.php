@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Risk extends Model
 {
+    use AuditsChanges;
+
     protected $fillable = ['management_system_id', 'code', 'title', 'description', 'category', 'owner_id', 'likelihood', 'impact', 'treatment_strategy', 'treatment_plan', 'residual_likelihood', 'residual_impact', 'status', 'target_date'];
     protected function casts(): array { return ['target_date' => 'date']; }
     protected static function booted(): void
