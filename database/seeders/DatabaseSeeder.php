@@ -14,6 +14,8 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->call(IsoRolePermissionSeeder::class);
+
         $standard = Standard::query()->updateOrCreate(
             ['code' => 'ISO/IEC 27001', 'edition' => '2022'],
             ['name' => 'Information Security Management Systems', 'description' => 'Master standar untuk implementasi ISMS. Isi requirement dan control dapat dilengkapi sesuai lisensi standar organisasi.', 'is_active' => true]
