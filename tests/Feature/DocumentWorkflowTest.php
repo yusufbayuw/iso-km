@@ -54,6 +54,8 @@ class DocumentWorkflowTest extends TestCase
             'approver_id' => $user->id,
         ]);
 
+        $this->assertSame('draft', $revision->status);
+
         $service = app(DocumentWorkflowService::class);
         $service->submitForReview($revision, $user);
         $this->assertSame('in_review', $revision->refresh()->status);

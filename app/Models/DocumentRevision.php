@@ -10,6 +10,11 @@ class DocumentRevision extends Model
 {
     use AuditsChanges;
 
+    protected $attributes = [
+        'status' => 'draft',
+        'is_current' => false,
+    ];
+
     protected $fillable = [
         'document_id', 'revision', 'status', 'file_path', 'change_summary',
         'prepared_by', 'reviewer_id', 'approver_id', 'submitted_for_review_at',
