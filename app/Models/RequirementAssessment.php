@@ -1,0 +1,15 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class RequirementAssessment extends Model
+{
+    protected $fillable = ['management_system_id', 'requirement_id', 'status', 'owner_id', 'notes', 'last_assessed_at', 'next_review_at'];
+    protected function casts(): array { return ['last_assessed_at' => 'datetime', 'next_review_at' => 'date']; }
+    public function managementSystem(): BelongsTo { return $this->belongsTo(ManagementSystem::class); }
+    public function requirement(): BelongsTo { return $this->belongsTo(Requirement::class); }
+    public function owner(): BelongsTo { return $this->belongsTo(User::class, 'owner_id'); }
+}
