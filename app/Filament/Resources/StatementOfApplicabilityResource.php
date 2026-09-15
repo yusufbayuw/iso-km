@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\StatementOfApplicabilityResource\Pages;
 use App\Models\StatementOfApplicability;
+use App\Services\ControlAssuranceService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -44,7 +45,19 @@ class StatementOfApplicabilityResource extends Resource
             Tables\Columns\IconColumn::make('applicable')->label('Applicable')->boolean(),
             Tables\Columns\TextColumn::make('implementation_status')->label('Implementasi')->badge()->color(fn (string $state): string => match ($state) {'implemented' => 'success','in_progress' => 'warning','not_applicable' => 'gray','planned' => 'info',default => 'danger'}),
             Tables\Columns\TextColumn::make('owner.name')->label('Owner')->placeholder('-'),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([
+            Tables\Actions\Action::make('assurance360')
+                ->label('Assurance 360')
+                ->icon('heroicon-o-magnifying-glass-circle')
+                ->modalHeading(fn (StatementOfApplicability $record): string => 'Assurance 360 — '.$record->control->code)
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Tutup')
+                ->modalContent(fn (StatementOfApplicability $record) => view('filament.assurance.control-360', [
+                    'data' => app(ControlAssuranceService::class)->build($record),
+                ])),
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make(),
+        ]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageStatementsOfApplicability::route('/')]; }
