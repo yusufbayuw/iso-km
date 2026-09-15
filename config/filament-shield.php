@@ -9,7 +9,7 @@ return [
         'navigation_group' => true,
         'is_globally_searchable' => false,
         'show_model_path' => true,
-        'is_scoped_to_tenant' => true,
+        'is_scoped_to_tenant' => false,
         'cluster' => null,
     ],
 
@@ -23,7 +23,7 @@ return [
         'enabled' => true,
         'name' => 'super_admin',
         'define_via_gate' => false,
-        'intercept_gate' => 'before', // after
+        'intercept_gate' => 'before',
     ],
 
     'panel_user' => [
@@ -33,20 +33,8 @@ return [
 
     'permission_prefixes' => [
         'resource' => [
-            'view',
-            'view_any',
-            'create',
-            'update',
-            'restore',
-            'restore_any',
-            'replicate',
-            'reorder',
-            'delete',
-            'delete_any',
-            'force_delete',
-            'force_delete_any',
+            'view','view_any','create','update','restore','restore_any','replicate','reorder','delete','delete_any','force_delete','force_delete_any',
         ],
-
         'page' => 'page',
         'widget' => 'widget',
     ],
@@ -66,15 +54,8 @@ return [
 
     'exclude' => [
         'enabled' => true,
-
-        'pages' => [
-            'Dashboard',
-        ],
-
-        'widgets' => [
-            'AccountWidget', 'FilamentInfoWidget',
-        ],
-
+        'pages' => ['Dashboard'],
+        'widgets' => ['AccountWidget', 'FilamentInfoWidget'],
         'resources' => [],
     ],
 
@@ -87,5 +68,4 @@ return [
     'register_role_policy' => [
         'enabled' => true,
     ],
-
 ];
