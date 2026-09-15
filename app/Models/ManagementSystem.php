@@ -19,4 +19,7 @@ class ManagementSystem extends Model
     public function evidences(): HasMany { return $this->hasMany(Evidence::class); }
     public function risks(): HasMany { return $this->hasMany(Risk::class); }
     public function audits(): HasMany { return $this->hasMany(Audit::class); }
+    public function objectives(): HasMany { return $this->hasMany(Objective::class); }
+    public function complianceObligations(): BelongsToMany { return $this->belongsToMany(ComplianceObligation::class); }
+    public function managementReviews(): HasMany { return $this->hasMany(ManagementReview::class); }
 }
