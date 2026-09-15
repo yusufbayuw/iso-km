@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\DocumentDistribution;
 use App\Models\DocumentRevision;
 use App\Models\User;
+use App\Notifications\IsoWorkflowNotification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +32,12 @@ class DocumentWorkflowService
             'rejected_at' => null,
         ]);
 
+        $revision->reviewer?->notify(new IsoWorkflowNotification(
+            'document_review',
+            'Dokumen menunggu review',
+            "{$revision->document->code} revisi {$revision->revision} diajukan untuk review.",
+        ));
+
         return $revision->refresh();
     }
 
@@ -50,6 +58,12 @@ class DocumentWorkflowService
             'rejected_at' => null,
         ]);
 
+        $revision->approver?->notify(new IsoWorkflowNotification(
+            'document_approval',
+            'Dokumen menunggu approval',
+            "{$revision->document->code} revisi {$revision->revision} selesai direview dan menunggu approval.",
+        ));
+
         return $revision->refresh();
     }
 
@@ -65,6 +79,13 @@ class DocumentWorkflowService
             'rejected_at' => now(),
             'review_notes' => $notes,
         ]);
+
+        $recipient = $revision->preparer ?: $revision->document->owner;
+        $recipient?->notify(new IsoWorkflowNotification(
+            'document_rejected',
+            'Dokumen dikembalikan',
+            "{$revision->document->code} revisi {$revision->revision} dikembalikan. Catatan: {$notes}",
+        ));
 
         return $revision->refresh();
     }
@@ -90,6 +111,12 @@ class DocumentWorkflowService
             'approved_at' => now(),
         ]);
 
+        $revision->document->owner?->notify(new IsoWorkflowNotification(
+            'document_approved',
+            'Dokumen telah disetujui',
+            "{$revision->document->code} revisi {$revision->revision} telah disetujui dan siap diberlakukan.",
+        ));
+
         return $revision->refresh();
     }
 
@@ -102,7 +129,7 @@ class DocumentWorkflowService
             DocumentRevision::query()
                 ->where('document_id', $revision->document_id)
                 ->where('is_current', true)
-                ->whereKeyNot($revision->getKey())
+                ->where('id', '!=', $revision->getKey())
                 ->get()
                 ->each(function (DocumentRevision $current): void {
                     $current->update([
@@ -123,6 +150,30 @@ class DocumentWorkflowService
                 'status' => 'effective',
                 'next_review_at' => today()->addMonths($revision->document->review_frequency_months ?: 12),
             ]);
+
+            $userIds = $revision->document->distributions()
+                ->pluck('user_id')
+                ->unique()
+                ->values();
+
+            foreach ($userIds as $userId) {
+                $distribution = DocumentDistribution::query()->updateOrCreate([
+                    'document_id' => $revision->document_id,
+                    'user_id' => $userId,
+                    'document_revision_id' => $revision->id,
+                ], [
+                    'distributed_at' => now(),
+                    'acknowledgement_due_at' => today()->addDays(14),
+                    'acknowledged_at' => null,
+                    'status' => 'pending',
+                ]);
+
+                $distribution->user?->notify(new IsoWorkflowNotification(
+                    'document_distribution',
+                    'Controlled document baru',
+                    "{$revision->document->code} revisi {$revision->revision} telah berlaku. Mohon baca dan lakukan acknowledgement.",
+                ));
+            }
 
             return $revision->refresh();
         });
