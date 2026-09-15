@@ -11,6 +11,7 @@ use App\Models\ManagementReviewAction;
 use App\Models\Objective;
 use App\Models\User;
 use App\Notifications\IsoDueReminder;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
@@ -78,7 +79,7 @@ class SendIsoReminders extends Command
             return 0;
         }
 
-        $due = $dueDate instanceof CarbonInterface ? $dueDate->copy()->startOfDay() : now()->parse($dueDate)->startOfDay();
+        $due = $dueDate instanceof CarbonInterface ? $dueDate->copy()->startOfDay() : Carbon::parse($dueDate)->startOfDay();
         $days = (int) now()->startOfDay()->diffInDays($due, false);
 
         $shouldSend = in_array($days, [30, 14, 7, 3, 1, 0], true)
