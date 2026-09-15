@@ -2,6 +2,8 @@
 
 namespace App\Filament\Widgets;
 
+use App\Models\AuditFinding;
+use App\Models\CorrectiveAction;
 use App\Models\Document;
 use App\Models\Evidence;
 use App\Models\RequirementAssessment;
@@ -24,11 +26,14 @@ class IsoOverview extends BaseWidget
         $coverage = $applicable > 0 ? round(($implemented / $applicable) * 100) : 0;
         $attention = Document::query()->whereNotNull('next_review_at')->whereDate('next_review_at', '<=', now()->addDays(30))->count()
             + Evidence::query()->whereNotNull('expires_at')->whereDate('expires_at', '<=', now()->addDays(30))->count();
+        $overdueCapa = CorrectiveAction::query()->whereNotNull('due_date')->whereDate('due_date', '<', today())->where('status', '!=', 'completed')->count();
 
         return [
             Stat::make('Readiness Requirement', $readiness.'%')->description($conformant.' sesuai dari '.$assessed.' yang sudah dinilai')->icon('heroicon-o-clipboard-document-check'),
             Stat::make('Implementasi Control', $coverage.'%')->description($implemented.' dari '.$applicable.' control applicable')->icon('heroicon-o-shield-check'),
             Stat::make('Risiko Tinggi Terbuka', Risk::query()->where('inherent_score', '>=', 12)->where('status', '!=', 'closed')->count())->description('Skor inherent ≥ 12')->icon('heroicon-o-exclamation-triangle'),
+            Stat::make('Open Finding', AuditFinding::query()->where('status', '!=', 'closed')->count())->description('Finding audit yang belum ditutup')->icon('heroicon-o-document-magnifying-glass'),
+            Stat::make('CAPA Overdue', $overdueCapa)->description('Corrective action melewati due date')->icon('heroicon-o-clock'),
             Stat::make('Perlu Perhatian', $attention)->description('Review dokumen / evidence ≤ 30 hari')->icon('heroicon-o-bell-alert'),
         ];
     }

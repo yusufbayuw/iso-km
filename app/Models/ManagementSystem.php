@@ -18,4 +18,5 @@ class ManagementSystem extends Model
     public function documents(): BelongsToMany { return $this->belongsToMany(Document::class); }
     public function evidences(): HasMany { return $this->hasMany(Evidence::class); }
     public function risks(): HasMany { return $this->hasMany(Risk::class); }
+    public function audits(): HasMany { return $this->hasMany(Audit::class); }
 }
