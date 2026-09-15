@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AuditFinding extends Model
 {
+    use AuditsChanges;
+
     protected $fillable = ['audit_id','code','finding_type','severity','title','description','requirement_id','control_id','owner_id','due_date','status','root_cause','correction'];
     protected function casts(): array { return ['due_date' => 'date']; }
     public function audit(): BelongsTo { return $this->belongsTo(Audit::class); }
