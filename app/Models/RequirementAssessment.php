@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RequirementAssessment extends Model
 {
+    use AuditsChanges;
+
     protected $fillable = ['management_system_id', 'requirement_id', 'status', 'owner_id', 'notes', 'last_assessed_at', 'next_review_at'];
     protected function casts(): array { return ['last_assessed_at' => 'datetime', 'next_review_at' => 'date']; }
     public function managementSystem(): BelongsTo { return $this->belongsTo(ManagementSystem::class); }
