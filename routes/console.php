@@ -8,6 +8,11 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
+Schedule::command('iso:refresh-intelligence')
+    ->dailyAt('07:00')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 Schedule::command('iso:send-reminders')
     ->dailyAt('07:30')
     ->withoutOverlapping()
