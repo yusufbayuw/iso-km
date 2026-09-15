@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EvidenceResource\Pages;
 use App\Models\Evidence;
+use App\Services\EvidenceLifecycleService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -35,30 +36,30 @@ class EvidenceResource extends Resource
             Forms\Components\DatePicker::make('valid_from')->label('Valid Sejak')->native(false),
             Forms\Components\DatePicker::make('expires_at')->label('Berlaku Sampai')->native(false),
             Forms\Components\Select::make('status')->label('Lifecycle')->options(['active' => 'Aktif','expired' => 'Kedaluwarsa','archived' => 'Arsip'])->default('active')->required(),
-            Forms\Components\Select::make('verification_status')->label('Verifikasi')->options(['pending' => 'Pending','verified' => 'Verified','rejected' => 'Rejected'])->default('pending')->disabled(fn (): bool => ! (auth()->user()?->can('evidence.verify') ?? false)),
+            Forms\Components\Placeholder::make('verification_status_display')->label('Status Verifikasi')->content(fn (?Evidence $record): string => $record?->verification_status ?? 'pending'),
             Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Textarea::make('description')->label('Deskripsi')->columnSpanFull(),
-            Forms\Components\Textarea::make('verification_notes')->label('Catatan Verifikasi')->columnSpanFull()->disabled(fn (): bool => ! (auth()->user()?->can('evidence.verify') ?? false)),
+            Forms\Components\Placeholder::make('verification_notes_display')->label('Catatan Verifikasi')->content(fn (?Evidence $record): string => $record?->verification_notes ?: '-')->columnSpanFull(),
         ])->columns(2);
     }
 
     public static function table(Table $table): Table
     {
         return $table->columns([
-            Tables\Columns\TextColumn::make('managementSystem.code')->label('Sistem')->placeholder('-'),
-            Tables\Columns\TextColumn::make('title')->label('Evidence')->searchable()->wrap(),
-            Tables\Columns\TextColumn::make('type')->label('Jenis')->badge(),
-            Tables\Columns\TextColumn::make('owner.name')->label('Owner')->placeholder('-'),
-            Tables\Columns\TextColumn::make('captured_at')->label('Tanggal')->date('d/m/Y')->placeholder('-'),
-            Tables\Columns\TextColumn::make('expires_at')->label('Berlaku Sampai')->date('d/m/Y')->placeholder('-')->sortable(),
-            Tables\Columns\TextColumn::make('verification_status')->label('Assurance')->badge(),
-            Tables\Columns\TextColumn::make('status')->label('Lifecycle')->badge(),
+            Tables\Columns\TextColumn::make('managementSystem.code')->label('Sistem')->placeholder('-'), Tables\Columns\TextColumn::make('title')->label('Evidence')->searchable()->wrap(),
+            Tables\Columns\TextColumn::make('type')->label('Jenis')->badge(), Tables\Columns\TextColumn::make('owner.name')->label('Owner')->placeholder('-'),
+            Tables\Columns\TextColumn::make('captured_at')->label('Tanggal')->date('d/m/Y')->placeholder('-'), Tables\Columns\TextColumn::make('expires_at')->label('Berlaku Sampai')->date('d/m/Y')->placeholder('-')->sortable(),
+            Tables\Columns\TextColumn::make('verification_status')->label('Assurance')->badge(), Tables\Columns\TextColumn::make('status')->label('Lifecycle')->badge(),
         ])->filters([
             Tables\Filters\SelectFilter::make('verification_status')->options(['pending' => 'Pending','verified' => 'Verified','rejected' => 'Rejected']),
             Tables\Filters\Filter::make('expired')->query(fn (Builder $query): Builder => $query->whereNotNull('expires_at')->whereDate('expires_at', '<', today())),
             Tables\Filters\Filter::make('expiring')->query(fn (Builder $query): Builder => $query->whereBetween('expires_at', [today(), today()->addDays(30)])),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([
+            Tables\Actions\Action::make('verify')->label('Verify')->icon('heroicon-o-shield-check')->color('success')->visible(fn (Evidence $record): bool => $record->verification_status !== 'verified' && (auth()->user()?->can('evidence.verify') ?? false))->form([Forms\Components\Textarea::make('notes')->label('Catatan Verifikasi')])->requiresConfirmation()->action(fn (Evidence $record, array $data) => app(EvidenceLifecycleService::class)->verifyEvidence($record, auth()->user(), $data['notes'] ?? null)),
+            Tables\Actions\Action::make('reject')->label('Reject')->icon('heroicon-o-x-circle')->color('danger')->visible(fn (Evidence $record): bool => $record->verification_status !== 'rejected' && (auth()->user()?->can('evidence.verify') ?? false))->form([Forms\Components\Textarea::make('notes')->label('Alasan')->required()])->requiresConfirmation()->action(fn (Evidence $record, array $data) => app(EvidenceLifecycleService::class)->rejectEvidence($record, auth()->user(), $data['notes'])),
+            Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make(),
+        ]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageEvidences::route('/')]; }
