@@ -29,6 +29,8 @@ class PortalPanelProvider extends PanelProvider
     {
         return $panel->default()->id('portal')->path('portal')->brandName('ISO-KM')->login(Login::class)
             ->colors(['danger' => Color::Red,'gray' => Color::Zinc,'info' => Color::Blue,'primary' => Color::Blue,'success' => Color::Green,'warning' => Color::Orange])
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([Pages\Dashboard::class])
