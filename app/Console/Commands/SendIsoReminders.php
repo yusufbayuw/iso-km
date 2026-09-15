@@ -6,6 +6,7 @@ use App\Models\Audit;
 use App\Models\ComplianceObligation;
 use App\Models\CorrectiveAction;
 use App\Models\Document;
+use App\Models\DocumentDistribution;
 use App\Models\ManagementReview;
 use App\Models\ManagementReviewAction;
 use App\Models\Objective;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\DB;
 class SendIsoReminders extends Command
 {
     protected $signature = 'iso:send-reminders';
-    protected $description = 'Kirim reminder ISO untuk review, audit, CAPA, objective, compliance, dan management review';
+    protected $description = 'Kirim reminder ISO untuk review, acknowledgement, audit, CAPA, objective, compliance, dan management review';
 
     public function handle(): int
     {
@@ -31,6 +32,19 @@ class SendIsoReminders extends Command
             ->whereNotNull('next_review_at')
             ->whereNotIn('status', ['obsolete'])
             ->each(fn (Document $item) => $sent += $this->notifyDue($item, $item->owner, $item->next_review_at, 'document_review', 'Review dokumen', "Dokumen {$item->code} - {$item->title} perlu direview."));
+
+        DocumentDistribution::query()
+            ->with(['user', 'document', 'revision'])
+            ->whereNotNull('acknowledgement_due_at')
+            ->where('status', 'pending')
+            ->each(fn (DocumentDistribution $item) => $sent += $this->notifyDue(
+                $item,
+                $item->user,
+                $item->acknowledgement_due_at,
+                'document_acknowledgement',
+                'Acknowledgement dokumen',
+                "Mohon baca dan acknowledge {$item->document?->code} revisi {$item->revision?->revision}.",
+            ));
 
         CorrectiveAction::query()
             ->with('owner')
