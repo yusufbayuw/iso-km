@@ -9,31 +9,37 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class EvidenceResource extends Resource
 {
     protected static ?string $model = Evidence::class;
     protected static ?string $navigationIcon = 'heroicon-o-paper-clip';
-    protected static ?string $navigationGroup = 'Dokumen & Bukti';
+    protected static ?string $navigationGroup = 'Assurance';
     protected static ?string $modelLabel = 'Evidence';
-    protected static ?string $pluralModelLabel = 'Evidence';
-    protected static ?int $navigationSort = 90;
+    protected static ?string $pluralModelLabel = 'Evidence Register';
+    protected static ?int $navigationSort = 40;
 
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->searchable()->preload(),
-            Forms\Components\TextInput::make('title')->label('Judul Evidence')->required(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->searchable()->preload()->required(),
+            Forms\Components\TextInput::make('title')->label('Judul Evidence')->required()->columnSpanFull(),
             Forms\Components\Select::make('type')->label('Jenis')->options(['record' => 'Rekaman','screenshot' => 'Screenshot','report' => 'Laporan','log' => 'Log','configuration' => 'Konfigurasi','other' => 'Lainnya'])->required(),
+            Forms\Components\TextInput::make('source')->label('Sumber')->placeholder('Sistem, unit, vendor, atau proses'),
+            Forms\Components\Select::make('confidentiality')->label('Klasifikasi')->options(['public' => 'Publik','internal' => 'Internal','confidential' => 'Rahasia','restricted' => 'Terbatas'])->default('internal')->required(),
             Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),
             Forms\Components\FileUpload::make('file_path')->label('File')->directory('iso/evidence')->downloadable()->openable(),
             Forms\Components\TextInput::make('external_url')->label('URL Eksternal')->url(),
             Forms\Components\DatePicker::make('captured_at')->label('Tanggal Evidence')->native(false),
+            Forms\Components\DatePicker::make('valid_from')->label('Valid Sejak')->native(false),
             Forms\Components\DatePicker::make('expires_at')->label('Berlaku Sampai')->native(false),
-            Forms\Components\Select::make('status')->label('Status')->options(['active' => 'Aktif','expired' => 'Kedaluwarsa','archived' => 'Arsip'])->required(),
+            Forms\Components\Select::make('status')->label('Lifecycle')->options(['active' => 'Aktif','expired' => 'Kedaluwarsa','archived' => 'Arsip'])->default('active')->required(),
+            Forms\Components\Select::make('verification_status')->label('Verifikasi')->options(['pending' => 'Pending','verified' => 'Verified','rejected' => 'Rejected'])->default('pending')->disabled(fn (): bool => ! (auth()->user()?->can('evidence.verify') ?? false)),
             Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Textarea::make('description')->label('Deskripsi')->columnSpanFull(),
+            Forms\Components\Textarea::make('verification_notes')->label('Catatan Verifikasi')->columnSpanFull()->disabled(fn (): bool => ! (auth()->user()?->can('evidence.verify') ?? false)),
         ])->columns(2);
     }
 
@@ -45,8 +51,13 @@ class EvidenceResource extends Resource
             Tables\Columns\TextColumn::make('type')->label('Jenis')->badge(),
             Tables\Columns\TextColumn::make('owner.name')->label('Owner')->placeholder('-'),
             Tables\Columns\TextColumn::make('captured_at')->label('Tanggal')->date('d/m/Y')->placeholder('-'),
-            Tables\Columns\TextColumn::make('expires_at')->label('Berlaku Sampai')->date('d/m/Y')->placeholder('-'),
-            Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
+            Tables\Columns\TextColumn::make('expires_at')->label('Berlaku Sampai')->date('d/m/Y')->placeholder('-')->sortable(),
+            Tables\Columns\TextColumn::make('verification_status')->label('Assurance')->badge(),
+            Tables\Columns\TextColumn::make('status')->label('Lifecycle')->badge(),
+        ])->filters([
+            Tables\Filters\SelectFilter::make('verification_status')->options(['pending' => 'Pending','verified' => 'Verified','rejected' => 'Rejected']),
+            Tables\Filters\Filter::make('expired')->query(fn (Builder $query): Builder => $query->whereNotNull('expires_at')->whereDate('expires_at', '<', today())),
+            Tables\Filters\Filter::make('expiring')->query(fn (Builder $query): Builder => $query->whereBetween('expires_at', [today(), today()->addDays(30)])),
         ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
     }
 
