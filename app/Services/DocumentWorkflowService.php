@@ -1,0 +1,167 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\DocumentRevision;
+use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class DocumentWorkflowService
+{
+    public function submitForReview(DocumentRevision $revision, User $actor): DocumentRevision
+    {
+        $this->authorize($actor, 'document.submit_review');
+        $this->assertStatus($revision, ['draft', 'rejected']);
+
+        if (! $revision->reviewer_id) {
+            throw ValidationException::withMessages([
+                'reviewer_id' => 'Reviewer wajib ditentukan sebelum dokumen diajukan untuk review.',
+            ]);
+        }
+
+        $revision->update([
+            'status' => 'in_review',
+            'prepared_by' => $revision->prepared_by ?: $actor->id,
+            'submitted_for_review_at' => now(),
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+            'rejected_at' => null,
+        ]);
+
+        return $revision->refresh();
+    }
+
+    public function review(DocumentRevision $revision, User $actor, ?string $notes = null): DocumentRevision
+    {
+        $this->authorize($actor, 'document.review');
+        $this->assertStatus($revision, ['in_review']);
+
+        if ($revision->reviewer_id && $revision->reviewer_id !== $actor->id && ! $actor->can('document.review_any')) {
+            throw new AuthorizationException('Dokumen ini ditugaskan kepada reviewer lain.');
+        }
+
+        $revision->update([
+            'status' => 'reviewed',
+            'reviewed_by' => $actor->id,
+            'reviewed_at' => now(),
+            'review_notes' => $notes,
+            'rejected_at' => null,
+        ]);
+
+        return $revision->refresh();
+    }
+
+    public function reject(DocumentRevision $revision, User $actor, string $notes): DocumentRevision
+    {
+        $this->authorize($actor, 'document.review');
+        $this->assertStatus($revision, ['in_review', 'reviewed']);
+
+        $revision->update([
+            'status' => 'rejected',
+            'reviewed_by' => $actor->id,
+            'reviewed_at' => now(),
+            'rejected_at' => now(),
+            'review_notes' => $notes,
+        ]);
+
+        return $revision->refresh();
+    }
+
+    public function approve(DocumentRevision $revision, User $actor): DocumentRevision
+    {
+        $this->authorize($actor, 'document.approve');
+        $this->assertStatus($revision, ['reviewed']);
+
+        if (! $revision->approver_id) {
+            throw ValidationException::withMessages([
+                'approver_id' => 'Approver wajib ditentukan sebelum dokumen disetujui.',
+            ]);
+        }
+
+        if ($revision->approver_id !== $actor->id && ! $actor->can('document.approve_any')) {
+            throw new AuthorizationException('Dokumen ini ditugaskan kepada approver lain.');
+        }
+
+        $revision->update([
+            'status' => 'approved',
+            'approved_by' => $actor->id,
+            'approved_at' => now(),
+        ]);
+
+        return $revision->refresh();
+    }
+
+    public function makeEffective(DocumentRevision $revision, User $actor, ?string $effectiveDate = null): DocumentRevision
+    {
+        $this->authorize($actor, 'document.make_effective');
+        $this->assertStatus($revision, ['approved']);
+
+        return DB::transaction(function () use ($revision, $effectiveDate): DocumentRevision {
+            DocumentRevision::query()
+                ->where('document_id', $revision->document_id)
+                ->where('is_current', true)
+                ->whereKeyNot($revision->getKey())
+                ->get()
+                ->each(function (DocumentRevision $current): void {
+                    $current->update([
+                        'status' => 'obsolete',
+                        'is_current' => false,
+                        'obsolete_at' => today(),
+                    ]);
+                });
+
+            $revision->update([
+                'status' => 'effective',
+                'effective_at' => $effectiveDate ?: today(),
+                'obsolete_at' => null,
+                'is_current' => true,
+            ]);
+
+            $revision->document->update([
+                'status' => 'effective',
+                'next_review_at' => today()->addMonths($revision->document->review_frequency_months ?: 12),
+            ]);
+
+            return $revision->refresh();
+        });
+    }
+
+    public function obsolete(DocumentRevision $revision, User $actor): DocumentRevision
+    {
+        $this->authorize($actor, 'document.obsolete');
+        $this->assertStatus($revision, ['effective']);
+
+        return DB::transaction(function () use ($revision): DocumentRevision {
+            $revision->update([
+                'status' => 'obsolete',
+                'is_current' => false,
+                'obsolete_at' => today(),
+            ]);
+
+            $revision->document->update([
+                'status' => 'obsolete',
+                'next_review_at' => null,
+            ]);
+
+            return $revision->refresh();
+        });
+    }
+
+    private function assertStatus(DocumentRevision $revision, array $allowed): void
+    {
+        if (! in_array($revision->status, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'status' => "Transisi tidak valid dari status {$revision->status}.",
+            ]);
+        }
+    }
+
+    private function authorize(User $actor, string $permission): void
+    {
+        if (! $actor->can($permission)) {
+            throw new AuthorizationException("Permission {$permission} diperlukan.");
+        }
+    }
+}
