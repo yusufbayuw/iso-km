@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ActionItem;
 use App\Models\AssuranceSnapshot;
+use App\Models\Audit;
 use App\Models\ComplianceScope;
 use App\Models\Control;
 use App\Models\Evidence;
@@ -12,6 +13,7 @@ use App\Models\EvidenceSchedule;
 use App\Models\ManagementSystem;
 use App\Models\Requirement;
 use App\Models\RequirementAssessment;
+use App\Models\Risk;
 use App\Models\Standard;
 use App\Models\StatementOfApplicability;
 use App\Models\User;
@@ -32,16 +34,18 @@ class ComplianceIntelligenceTest extends TestCase
         $owner = User::create(['name' => 'Process Owner','email' => 'owner@example.test','password' => 'password']);
         $verifier = User::create(['name' => 'Verifier','email' => 'verifier@example.test','password' => 'password']);
         Permission::findOrCreate('evidence.verify', 'web'); $verifier->givePermissionTo('evidence.verify');
+        Risk::create(['management_system_id' => $system->id,'code' => 'R-001','title' => 'Managed risk','likelihood' => 1,'impact' => 1,'status' => 'closed']);
+        Audit::create(['management_system_id' => $system->id,'code' => 'AUD-001','title' => 'Completed audit','type' => 'internal','status' => 'completed']);
         $schedule = EvidenceSchedule::create(['management_system_id' => $system->id,'owner_id' => $owner->id,'code' => 'EVD-BACKUP-MONTHLY','title' => 'Backup restore test','evidence_type' => 'report','frequency' => 'monthly','lead_days' => 7,'validity_days' => 45,'next_due_at' => today()->addDays(3)]);
         $schedule->requirements()->attach($requirement); $schedule->controls()->attach($control);
         $lifecycle = app(EvidenceLifecycleService::class); $this->assertSame(1, $lifecycle->generateDueRequests());
         $request = EvidenceRequest::firstOrFail(); $this->assertSame('requested', $request->status); $this->assertSame($owner->id, $request->owner_id);
         app(ActionItemSyncService::class)->sync(); $work = ActionItem::where('category', 'evidence_collection')->firstOrFail(); $this->assertSame($owner->id, $work->owner_id); $this->assertSame('open', $work->status);
         $evidence = Evidence::create(['management_system_id' => $system->id,'owner_id' => $owner->id,'title' => 'Backup restore September','type' => 'report','status' => 'active','verification_status' => 'pending','captured_at' => today()]);
-        $lifecycle->submit($request, $evidence, $owner); $request->refresh(); $this->assertSame('submitted', $request->status); $this->assertTrue($evidence->refresh()->controls->contains($control)); $this->assertTrue($evidence->requirements->contains($requirement));
+        $lifecycle->submit($request, $evidence, $owner); $this->assertSame('submitted', $request->refresh()->status); $this->assertTrue($evidence->refresh()->controls->contains($control)); $this->assertTrue($evidence->requirements->contains($requirement));
         $lifecycle->verify($request, $verifier, 'Restore berhasil diverifikasi.'); $this->assertSame('verified', $request->refresh()->status); $this->assertSame('verified', $evidence->refresh()->verification_status); $this->assertSame($verifier->id, $evidence->verified_by);
         app(ActionItemSyncService::class)->sync(); $this->assertSame('completed', $work->refresh()->status);
-        $snapshot = app(AssuranceAnalysisService::class)->refresh($system); $this->assertSame('100.00', $snapshot->requirement_readiness); $this->assertSame('100.00', $snapshot->control_implementation); $this->assertSame('100.00', $snapshot->evidence_coverage); $this->assertSame('100.00', $snapshot->evidence_freshness); $this->assertSame('high', $snapshot->confidence_level);
+        $snapshot = app(AssuranceAnalysisService::class)->refresh($system); $this->assertSame('100.00', $snapshot->requirement_readiness); $this->assertSame('100.00', $snapshot->control_implementation); $this->assertSame('100.00', $snapshot->evidence_coverage); $this->assertSame('100.00', $snapshot->evidence_freshness); $this->assertSame('100.00', $snapshot->risk_health); $this->assertSame('100.00', $snapshot->findings_health); $this->assertSame('high', $snapshot->confidence_level);
     }
 
     public function test_intelligence_refresh_command_is_idempotent_for_due_requests(): void
@@ -52,6 +56,29 @@ class ComplianceIntelligenceTest extends TestCase
         $schedule->requirements()->attach($requirement); $schedule->controls()->attach($control);
         $this->artisan('iso:refresh-intelligence')->assertExitCode(0); $this->assertDatabaseCount('evidence_requests', 1); $this->assertDatabaseCount('action_items', 1); $this->assertDatabaseCount('assurance_snapshots', 1);
         $this->artisan('iso:refresh-intelligence')->assertExitCode(0); $this->assertDatabaseCount('evidence_requests', 1); $this->assertDatabaseCount('action_items', 1); $this->assertDatabaseCount('assurance_snapshots', 1); $this->assertInstanceOf(AssuranceSnapshot::class, $system->refresh()->assuranceSnapshot);
+    }
+
+    public function test_gap_becomes_work_and_is_closed_when_gap_is_resolved(): void
+    {
+        [$system, $requirement] = $this->createManagementSystem();
+        $owner = User::create(['name' => 'Gap Owner','email' => 'gap@example.test','password' => 'password']);
+        $assessment = RequirementAssessment::query()->where('management_system_id', $system->id)->where('requirement_id', $requirement->id)->firstOrFail();
+        $assessment->update(['status' => 'nonconformant','owner_id' => $owner->id,'notes' => 'Proses belum diterapkan.']);
+        app(ActionItemSyncService::class)->sync();
+        $work = ActionItem::query()->where('category', 'requirement_gap')->firstOrFail();
+        $this->assertSame($owner->id, $work->owner_id); $this->assertSame('open', $work->status);
+        $assessment->update(['status' => 'conformant']);
+        app(ActionItemSyncService::class)->sync();
+        $this->assertSame('completed', $work->refresh()->status);
+    }
+
+    public function test_missing_risk_and_audit_data_does_not_look_healthy(): void
+    {
+        [$system] = $this->createManagementSystem();
+        $snapshot = app(AssuranceAnalysisService::class)->refresh($system);
+        $this->assertSame('0.00', $snapshot->risk_health);
+        $this->assertSame('0.00', $snapshot->findings_health);
+        $this->assertNotSame('high', $snapshot->confidence_level);
     }
 
     private function createManagementSystem(): array

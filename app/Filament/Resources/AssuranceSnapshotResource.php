@@ -28,7 +28,7 @@ class AssuranceSnapshotResource extends Resource
             Tables\Columns\TextColumn::make('risk_health')->label('Risk Health')->suffix('%')->sortable(), Tables\Columns\TextColumn::make('findings_health')->label('Finding Health')->suffix('%')->sortable(),
             Tables\Columns\TextColumn::make('action_health')->label('Action Health')->suffix('%')->sortable(), Tables\Columns\TextColumn::make('confidence_level')->label('Confidence')->badge(), Tables\Columns\TextColumn::make('calculated_at')->label('Updated')->since()->sortable(),
         ])->actions([
-            Tables\Actions\Action::make('download_report')->label('CSV Report')->icon('heroicon-o-arrow-down-tray')->action(function (AssuranceSnapshot $record) {
+            Tables\Actions\Action::make('download_report')->label('CSV Report')->icon('heroicon-o-arrow-down-tray')->visible(fn (): bool => auth()->user()?->can('assurance.report') ?? false)->action(function (AssuranceSnapshot $record) {
                 $csv = app(AssuranceReportService::class)->toCsv($record->managementSystem);
                 $filename = 'assurance-'.strtolower($record->managementSystem->code).'-'.today()->format('Ymd').'.csv';
                 return response()->streamDownload(fn () => print($csv), $filename, ['Content-Type' => 'text/csv']);
