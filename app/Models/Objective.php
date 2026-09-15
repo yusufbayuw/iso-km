@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Objective extends Model
 {
+    use AuditsChanges;
+
     protected $fillable = ['management_system_id','code','title','description','owner_id','metric','unit','baseline_value','target_value','direction','frequency','status','start_date','end_date'];
     protected function casts(): array { return ['baseline_value' => 'decimal:4','target_value' => 'decimal:4','start_date' => 'date','end_date' => 'date']; }
     public function managementSystem(): BelongsTo { return $this->belongsTo(ManagementSystem::class); }
