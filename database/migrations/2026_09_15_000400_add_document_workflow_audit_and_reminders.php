@@ -74,6 +74,7 @@ return new class extends Migration
         Schema::dropIfExists('document_distributions');
 
         Schema::table('document_revisions', function (Blueprint $table) {
+            $table->dropIndex(['document_id', 'status']);
             $table->dropConstrainedForeignId('reviewer_id');
             $table->dropConstrainedForeignId('approver_id');
             $table->dropColumn([
