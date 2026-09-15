@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ManagementSystem extends Model
 {
@@ -17,6 +18,10 @@ class ManagementSystem extends Model
     public function soaEntries(): HasMany { return $this->hasMany(StatementOfApplicability::class); }
     public function documents(): BelongsToMany { return $this->belongsToMany(Document::class); }
     public function evidences(): HasMany { return $this->hasMany(Evidence::class); }
+    public function evidenceSchedules(): HasMany { return $this->hasMany(EvidenceSchedule::class); }
+    public function evidenceRequests(): HasMany { return $this->hasMany(EvidenceRequest::class); }
+    public function actionItems(): HasMany { return $this->hasMany(ActionItem::class); }
+    public function assuranceSnapshot(): HasOne { return $this->hasOne(AssuranceSnapshot::class); }
     public function risks(): HasMany { return $this->hasMany(Risk::class); }
     public function audits(): HasMany { return $this->hasMany(Audit::class); }
     public function objectives(): HasMany { return $this->hasMany(Objective::class); }
