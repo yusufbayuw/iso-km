@@ -26,7 +26,7 @@ class TrainingProgramResource extends Resource
             Forms\Components\TextInput::make('code')->label('Kode')->required(),
             Forms\Components\TextInput::make('title')->label('Program')->required()->columnSpanFull(),
             Forms\Components\Select::make('category')->label('Kategori')->options(['awareness' => 'Awareness','training' => 'Training','certification' => 'Certification','exercise' => 'Exercise / Drill','onboarding' => 'Onboarding'])->required()->default('awareness'),
-            Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),
+            Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->required()->searchable()->preload(),
             Forms\Components\TextInput::make('target_audience')->label('Target Peserta'),
             Forms\Components\TextInput::make('delivery_method')->label('Metode'),
             Forms\Components\Toggle::make('mandatory')->label('Wajib')->default(true),
