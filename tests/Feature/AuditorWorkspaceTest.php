@@ -15,10 +15,12 @@ use App\Models\RequirementAssessment;
 use App\Models\Risk;
 use App\Models\Standard;
 use App\Models\StatementOfApplicability;
+use App\Models\User;
 use App\Services\AuditPackService;
 use App\Services\TraceabilityMatrixService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -61,7 +63,7 @@ class AuditorWorkspaceTest extends TestCase
         $risk->controls()->attach($control);
 
         $audit = Audit::create(['management_system_id' => $system->id,'code' => 'AUD-001','title' => 'Internal Audit','type' => 'internal','status' => 'completed']);
-        $finding = AuditFinding::create(['audit_id' => $audit->id,'code' => 'F-001','finding_type' => 'nonconformity','severity' => 'major','title' => 'Open finding','requirement_id' => $requirement->id,'control_id' => $control->id,'status' => 'open']);
+        $finding = AuditFinding::create(['audit_id' => $audit->id,'code' => 'F-001','finding_type' => 'nonconformity','severity' => 'major','title' => 'Open finding','description' => 'Control evidence is not consistently reviewed.','requirement_id' => $requirement->id,'control_id' => $control->id,'status' => 'open']);
         CorrectiveAction::create(['audit_finding_id' => $finding->id,'action' => 'Fix the process','status' => 'open']);
 
         $matrix = app(TraceabilityMatrixService::class)->build($system);
@@ -101,6 +103,19 @@ class AuditorWorkspaceTest extends TestCase
 
         $zip->close();
         File::delete($path);
+    }
+
+    public function test_authorized_user_can_open_auditor_workspace(): void
+    {
+        $this->createSystem();
+        $user = User::factory()->create();
+        Permission::findOrCreate('auditor_workspace.view', 'web');
+        $user->givePermissionTo('auditor_workspace.view');
+
+        $this->actingAs($user)
+            ->get('/portal/auditor-workspace')
+            ->assertOk()
+            ->assertSee('Requirement Traceability Matrix');
     }
 
     private function createSystem(): array
