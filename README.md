@@ -1,6 +1,6 @@
 # ISO-KM
 
-ISO-KM adalah **compliance intelligence & assurance system** berbasis Laravel + Filament untuk menjalankan management system secara operasional. Tujuannya bukan memindahkan spreadsheet ISO ke browser, tetapi membuat data yang sama dapat dipakai ulang untuk assessment, risk, evidence, people competence, supplier assurance, audit, action, dashboard, dan laporan.
+ISO-KM adalah **compliance intelligence & assurance system** berbasis Laravel + Filament untuk menjalankan management system secara operasional. Tujuannya bukan memindahkan spreadsheet ISO ke browser, tetapi membuat data yang sama dapat dipakai ulang untuk assessment, risk, evidence, people competence, supplier assurance, audit, action, dashboard, traceability, dan laporan.
 
 > Prinsip produk: **Input once → connect → analyze → act → assure.**
 
@@ -22,12 +22,15 @@ Compliance Scope
     ├── Objectives & KPI
     ├── Compliance Obligations
     ├── Management Reviews → Actions
-    ├── Training & Awareness → Assignments
+    ├── Training & Awareness → Assignments → Verification
     ├── Competence Register
-    ├── Suppliers / Third Parties → Assessments
+    ├── Suppliers / Third Parties → Controlled Assessments
     ├── Unified Action Items / My Work
     ├── Assurance Snapshot & Reports
-    └── Auditor Workspace → Auditor Pack
+    ├── Cross-Standard Mapping → Evidence Reuse
+    ├── External Audit Access (scoped & expiring)
+    ├── External Auditor Workspace → Sanitized Audit Pack
+    └── Internal Auditor Workspace → Auditor Pack
 ```
 
 Master standard dipisahkan dari implementasi organisasi. Requirement, control, risk, document, evidence, training, competence, supplier, audit, dan action saling direlasikan; informasi yang sama tidak perlu diketik ulang hanya karena muncul di modul lain.
@@ -44,6 +47,8 @@ Evidence schedule dapat dimapping ke requirement dan control. Ketika evidence re
 
 Training program, competency record, dan supplier juga dapat dimapping ke requirement/control. Supplier evidence dapat direferensikan tanpa upload ulang.
 
+Untuk multi-standard, requirement dan control dapat dipetakan lintas standard. Evidence tetap satu source-of-truth dan hanya direuse melalui mapping yang sudah approved serta acceptance manusia pada target management system.
+
 ### 3. Analyze
 
 `AssuranceAnalysisService` menghitung beberapa dimensi terpisah:
@@ -59,7 +64,7 @@ Training program, competency record, dan supplier juga dapat dimapping ke requir
 
 Attention counts juga memantau overdue mandatory training, competence yang mendekati expiry, high-risk suppliers, dan supplier review yang jatuh tempo.
 
-Tidak ada satu angka **“ISO compliant %”**. Ketiadaan data risk atau audit juga tidak dianggap sehat; no data menurunkan confidence. Training dan supplier saat ini dipakai sebagai assurance attention signal, bukan faktor otomatis yang mengubah keputusan compliance.
+Tidak ada satu angka **“ISO compliant %”**. Ketiadaan data risk atau audit juga tidak dianggap sehat; no data menurunkan confidence. Training, supplier, dan cross-standard reuse menjadi assurance context, bukan keputusan compliance otomatis.
 
 ### 4. Act
 
@@ -76,13 +81,14 @@ Tidak ada satu angka **“ISO compliant %”**. Ketiadaan data risk atau audit j
 - objective review;
 - compliance obligation review;
 - management review dan tindak lanjutnya;
-- training assignment;
+- training assignment dan verification handoff;
 - competence renewal;
 - supplier review;
+- supplier assessment execution dan review;
 - supplier reassessment;
 - high/critical supplier treatment.
 
-Action yang berasal dari sumber domain ditutup otomatis ketika kondisi sumbernya sudah terselesaikan. Action manual tetap dapat dibuat untuk pekerjaan ad-hoc.
+Action yang berasal dari source domain ditutup otomatis ketika kondisi sumbernya sudah terselesaikan. Action manual tetap dapat dibuat untuk pekerjaan ad-hoc.
 
 ### 5. Assure
 
@@ -90,11 +96,12 @@ Assurance Overview menyimpan snapshot per management system sehingga dashboard d
 
 `Statement of Applicability` memiliki **Assurance 360** yang menampilkan requirement, controlled documents/current revision, evidence, risk, audit findings, dan CAPA dalam satu view.
 
-**Auditor Workspace** memperluas traceability sampai level requirement dan menampilkan:
+**Internal Auditor Workspace** memperluas traceability sampai level requirement dan menampilkan:
 
 - linked controls;
 - document/effective revision coverage;
-- verified/fresh evidence;
+- direct verified/fresh evidence;
+- accepted cross-standard reused evidence secara terpisah;
 - open/high risks;
 - training programs;
 - competence records;
@@ -103,7 +110,7 @@ Assurance Overview menyimpan snapshot per management system sehingga dashboard d
 - open CAPA;
 - audit attention state.
 
-Assurance 360 dan Auditor Workspace adalah traceability views, bukan keputusan compliance otomatis.
+Assurance 360, internal Auditor Workspace, dan External Auditor Workspace adalah traceability views, bukan keputusan compliance otomatis.
 
 ## Evidence lifecycle
 
@@ -150,43 +157,106 @@ Saat revision baru effective:
 2. hanya satu revision yang `is_current = true`;
 3. document review date dihitung ulang;
 4. controlled copy didistribusikan ulang;
-5. acknowledgement penerima di-reset untuk revision baru;
+5. pending acknowledgement revision lama menjadi `superseded`;
 6. penerima mendapat database notification.
+
+Employee mengakses controlled copy melalui `/portal/my-documents`. Download memakai authenticated route, bukan URL storage publik.
 
 ## Training, awareness & competence
 
-`TrainingProgram` menyimpan program awareness/training/certification/exercise/onboarding per management system dan dapat dimapping ke requirement/control.
+`TrainingProgram` menyimpan awareness/training/certification/exercise/onboarding per management system dan dapat dimapping ke requirement/control.
 
-Setiap program mempunyai `TrainingAssignment` per person dan `cycle_key`, sehingga program berulang tidak menimpa histori periode sebelumnya. Assignment menyimpan assigned/due/completed date, result, score, validity, dan evidence.
+Setiap program mempunyai `TrainingAssignment` per person dan `cycle_key`, sehingga program berulang tidak menimpa histori periode sebelumnya. Assignment adalah record terkontrol tersendiri dan tidak diedit melalui repeater program.
+
+Self-service tersedia di `/portal/my-training`:
+
+```text
+Assigned
+  ↓ employee start
+In Progress
+  ↓ submit evidence / notes
+Submitted
+  ↓ coordinator verify
+Completed / Failed / Exempt
+
+Submitted
+  ↓ reject
+Rejected → rework → submit kembali
+```
+
+Submission memindahkan pekerjaan dari employee ke verifier. Evidence training mengikuti hasil verification. Training Program yang sudah memiliki assignment tidak dapat dihapus; gunakan `paused` atau `retired`.
 
 `CompetencyRecord` menyimpan kompetensi personel berdasarkan training, sertifikasi, pengalaman, atau assessment. Record dapat mempunyai validity period dan evidence serta mapping requirement/control.
-
-Automation:
-
-- training yang belum selesai muncul di My Work;
-- mandatory training overdue masuk assurance attention;
-- competence yang mendekati expiry menghasilkan renewal action;
-- competence due ikut assurance attention.
 
 ## Supplier / third-party assurance
 
 Supplier adalah master pihak ketiga yang dapat dipakai oleh beberapa management system. Supplier menyimpan owner internal, criticality, review cycle, linked requirement/control, dan linked evidence.
 
-`SupplierAssessment` disimpan per supplier + management system agar satu supplier dapat memiliki risk posture berbeda pada scope yang berbeda. Assessment menyimpan assessor, dates, score, risk rating, status, evidence, summary, dan required actions.
+`SupplierAssessment` disimpan per supplier + management system agar satu supplier dapat memiliki risk posture berbeda pada scope yang berbeda.
 
-Automation:
+Assessment mengikuti state machine terkontrol:
 
-- supplier review yang mendekati due date → My Work;
-- supplier reassessment due → My Work;
-- assessment high/critical → high-priority supplier treatment;
-- high-risk supplier menjadi attention pada requirement traceability;
-- supplier evidence dan assessment masuk Auditor Pack.
+```text
+Planned
+  ↓ request
+Requested
+  ↓ start
+In Progress
+  ↓ submit
+Submitted
+  ↓ review
+Under Review
+  ↓ decision
+Accepted / Conditional / Rejected
+
+Conditional
+  ↓ treatment verification
+Accepted
+
+Accepted / Rejected
+  ↓ close
+Closed
+```
+
+Permission execution, review, decision, dan treatment verification dipisahkan. Supplier yang sudah mempunyai assessment tidak dapat dihapus agar histori assurance tetap utuh; gunakan status lifecycle supplier.
+
+## Cross-standard mapping & evidence reuse
+
+ISO-KM mendukung:
+
+```text
+Requirement ↔ Requirement
+Control ↔ Control
+```
+
+Mapping harus menghubungkan object dari **dua standard berbeda**. Mapping dalam standard yang sama ditolak.
+
+Tipe mapping:
+
+- `equivalent`
+- `partial`
+- `supporting`
+- `related`
+
+Setiap mapping menyimpan `coverage_percent`, rationale, mapper, reviewer, timestamp, dan status review. `coverage_percent` adalah metadata mapping, **bukan persentase compliance**.
+
+Evidence reuse hanya dapat diterima bila:
+
+1. mapping sudah approved;
+2. source dan target berada pada compliance scope yang sama tetapi standard berbeda;
+3. evidence benar-benar linked ke requirement/control sumber;
+4. evidence aktif, verified, dan belum expired;
+5. actor memiliki `cross_standard_reuse.accept`.
+
+Evidence **tidak disalin**. `EvidenceReuse` hanya menghubungkan evidence asli ke target requirement/control. Karena itu expiry, verification status, dan provenance tetap mengikuti source evidence.
+
+Coverage workspace tersedia di `/portal/cross-standard-workspace` dan membedakan `available`, `accepted`, serta `rejected` reuse. Traceability selalu menampilkan direct evidence dan reused evidence sebagai dua provenance berbeda.
 
 ## My Work
 
 My Work adalah lapisan kerja, bukan duplikasi source-of-truth. Generated action menyimpan morph reference ke object sumber.
 
-User biasa melihat action miliknya. Permission `action_item.view_all` membuka seluruh queue untuk ISO Manager / Top Management sesuai role template.
+User biasa melihat action miliknya. Permission `action_item.view_all` membuka seluruh queue untuk role/permission yang berwenang.
 
 Prioritas generated work ditentukan dari sifat gap dan due date:
 
@@ -195,11 +265,11 @@ Prioritas generated work ditentukan dari sifat gap dan due date:
 - due ≤ 14 hari → medium;
 - high risk / requirement gap / objective at risk / high-risk supplier treatment → minimal high.
 
-## Assurance reporting & Auditor Pack
+## Assurance reporting & audit packs
 
-Assurance Overview menyediakan CSV baseline per management system berisi identitas standard/scope, assurance dimensions, attention counts, risk/finding/action/evidence summary. Export memerlukan `assurance.report`.
+### Internal Auditor Workspace
 
-Auditor Workspace tersedia di `/portal/auditor-workspace`. Export ZIP membutuhkan `audit_pack.export` dan menghasilkan source-of-truth registers berikut:
+Internal workspace tersedia di `/portal/auditor-workspace`. Export ZIP membutuhkan `audit_pack.export` dan menghasilkan source-of-truth registers:
 
 ```text
 manifest.json
@@ -216,7 +286,38 @@ findings-capa.csv
 management-review.csv
 ```
 
-`manifest.json` menyimpan identitas management system, assurance snapshot, attention counts, traceability summary, daftar register, timestamp, dan disclaimer. Auditor Pack adalah export read-only; tidak membuat tabel laporan kedua.
+Auditor Pack adalah export read-only atas source-of-truth; tidak membuat tabel laporan kedua.
+
+### External Auditor Workspace
+
+External workspace tersedia di `/portal/external-auditor-workspace`.
+
+Akses external auditor tidak diberikan ke seluruh panel/data. Akses membutuhkan:
+
+```text
+portal.access
++
+external_auditor_workspace.view
++
+ExternalAuditAccess aktif untuk management system tertentu
+```
+
+Grant dapat memiliki `valid_from`, `expires_at`, revoke actor/timestamp, serta flag `allow_audit_pack`.
+
+External Auditor Pack sengaja lebih sempit:
+
+```text
+manifest.json
+traceability-matrix.csv
+statement-of-applicability.csv
+evidence-index.csv
+cross-standard-evidence-reuse.csv
+findings-summary.csv
+```
+
+Pack external **tidak memasukkan raw evidence files**. Export memerlukan permission `external_audit_pack.export` dan `allow_audit_pack = true` pada grant aktif; validasi dilakukan server-side.
+
+Dokumentasi governance lengkap tersedia di `docs/EXTERNAL_AUDIT_AND_CROSS_STANDARD.md`.
 
 ## Permission & role templates
 
@@ -225,21 +326,24 @@ Role adalah template convenience; **permission adalah source of truth authorizat
 Template awal:
 
 ```text
-iso_manager          seluruh fungsi ISO
-iso_coordinator      gabungan untuk organisasi kecil
-document_controller document + evidence control
-document_approver    document approval
-internal_auditor     audit, assurance, evidence + read people/supplier
-process_owner        risk, objective, evidence, finding/CAPA + assigned training
-training_coordinator training, awareness, competence register
-third_party_owner    supplier dan supplier assessment
-top_management       assurance, reports, governance & management review
-employee             assigned work + acknowledgement + assigned training
+iso_manager           seluruh fungsi ISO
+iso_coordinator       gabungan untuk organisasi kecil
+document_controller  document + evidence control
+document_approver     document approval
+internal_auditor      audit, assurance, evidence, traceability
+process_owner         risk, objective, evidence, finding/CAPA + assigned work
+training_coordinator  training, verification, competence register
+third_party_owner     supplier dan supplier assessment
+top_management        assurance, reports, governance & management review
+employee              assigned work + acknowledgement + assigned training
+external_auditor      scoped external audit workspace only
 ```
 
 Custom permissions penting antara lain:
 
 ```text
+portal.access
+
 document.submit_review
 document.review
 document.approve
@@ -256,6 +360,15 @@ assurance.report
 auditor_workspace.view
 audit_pack.export
 
+external_audit_access.manage
+external_auditor_workspace.view
+external_audit_pack.export
+
+cross_standard_mapping.manage
+cross_standard_mapping.approve
+cross_standard_workspace.view
+cross_standard_reuse.accept
+
 audit.perform
 finding.respond
 capa.manage
@@ -266,14 +379,21 @@ management_review.manage
 
 training.manage
 training.complete
+training.verify
 competency.manage
+
 supplier.manage
 supplier.assess
+supplier.review
+supplier.decide
+supplier.verify_treatment
 
 activity_log.view
 ```
 
-CRUD resource tetap memakai permission Filament Shield seperti `view_any_training::program`, `create_supplier`, `update_supplier::assessment`, dst.
+CRUD resource tetap memakai permission Filament Shield seperti `view_any_training::program`, `create_supplier`, `update_supplier::assessment`, `view_any_requirement::mapping`, dst.
+
+`User::canAccessPanel()` memakai `portal.access` setelah permission tersebut tersedia. Implementasi dibuat deployment-safe: sebelum permission pertama kali disemai, akses existing tidak langsung terkunci; setelah seeder berjalan, permission menjadi gate panel.
 
 > `IsoRolePermissionSeeder` memakai `syncPermissions()` pada role template bawaan. Pada production yang role template-nya sudah dikustom manual, review perubahan permission sebelum menjalankan seeder ulang.
 
@@ -294,7 +414,7 @@ Audit trail bersifat read-only dan memerlukan `activity_log.view`.
 
 1. expire evidence yang sudah tidak valid;
 2. generate recurring evidence requests;
-3. sinkronisasi My Work dari source domain, termasuk training/competence/supplier;
+3. sinkronisasi My Work dari source domain;
 4. hitung ulang assurance snapshots.
 
 Server production harus menjalankan Laravel Scheduler:
@@ -346,7 +466,7 @@ php artisan optimize:clear
 php artisan optimize
 ```
 
-PHP extension `zip` diperlukan untuk Auditor Pack. Review catatan `syncPermissions()` di atas sebelum menjalankan permission seeder pada role yang sudah dikustom di production.
+PHP extension `zip` diperlukan untuk internal maupun external audit pack. Review catatan `syncPermissions()` sebelum menjalankan permission seeder pada role yang sudah dikustom di production.
 
 ## Testing
 
@@ -362,14 +482,19 @@ Feature tests mencakup antara lain:
 - requirement gap → generated action → auto close ketika resolved;
 - assurance analysis dan no-data safety;
 - idempotensi `iso:refresh-intelligence`;
-- Auditor Workspace render dan traceability;
-- Auditor Pack ZIP/source-of-truth exports;
-- training assignment / competence renewal → My Work;
-- supplier review / reassessment / high-risk treatment → My Work;
-- people/supplier attention → assurance + traceability;
-- people/supplier registers → Auditor Pack.
+- internal Auditor Workspace render dan traceability;
+- internal Auditor Pack ZIP/source-of-truth exports;
+- employee training self-service → verification handoff;
+- authenticated controlled-document download dan acknowledgement;
+- controlled supplier assessment state transitions;
+- training / competence / supplier → My Work + assurance + traceability;
+- external auditor grant isolation;
+- sanitized External Auditor Pack tanpa raw evidence;
+- approved cross-standard mapping → evidence reuse tanpa menyalin source evidence;
+- direct vs reused evidence traceability;
+- rejection terhadap same-standard mapping.
 
-GitHub Actions menjalankan test suite dengan SQLite in-memory. Head implementasi people/supplier terakhir tervalidasi dengan **17 tests / 106 assertions**.
+GitHub Actions menjalankan test suite dengan SQLite in-memory. Baseline saat ini tervalidasi dengan **22 tests / 145 assertions**.
 
 ## Prinsip desain
 
@@ -392,16 +517,18 @@ Aturan implementasi utama:
 3. “Evidence exists” tidak identik dengan “compliant”.
 4. Tidak ada data tidak boleh menghasilkan assurance hijau palsu.
 5. Generated report adalah view atas source-of-truth, bukan form baru yang harus diketik ulang.
-6. High-risk supplier, expired competence, atau overdue training menjadi attention/action, bukan klaim non-compliance otomatis.
-7. AI nantinya hanya membantu klasifikasi, mapping, dan summarization; keputusan compliance tetap manusia.
+6. High-risk supplier, expired competence, overdue training, atau reused evidence menjadi context/action; bukan klaim compliance otomatis.
+7. Provenance harus tetap terlihat: direct evidence dan reused evidence tidak boleh disamarkan menjadi satu sumber.
+8. Akses eksternal harus scoped, revocable, dan sebisa mungkin time-limited.
+9. AI nantinya hanya membantu klasifikasi, mapping, dan summarization; keputusan compliance tetap manusia.
 
 ## Roadmap berikutnya
 
-1. Employee self-service untuk menyelesaikan assigned training, upload evidence, dan acknowledgement tanpa hak edit program.
-2. Supplier reassessment workflow yang lebih ketat: request → submission → review → accept/conditional/reject → treatment verification.
-3. Delegation, escalation, dan bulk operation untuk evidence/training/supplier pada organisasi besar.
-4. External auditor read-only workspace dengan scoped, time-limited access.
-5. Integrasi evidence dari sistem internal/API untuk mengurangi input manual.
-6. Dashboard per persona dan management heatmap.
-7. Cross-standard mapping untuk ISO 27001 / 9001 / 22301 tanpa duplikasi evidence.
-8. Backup, retention, log-integrity, dan production hardening.
+1. Delegation, escalation, dan bulk operation untuk evidence, training, supplier, CAPA, serta My Work pada organisasi besar.
+2. Integrasi evidence dari sistem internal/API untuk mengurangi input manual dan memperkuat provenance.
+3. Dashboard per persona, management heatmap, dan multi-management-system executive view.
+4. Import tooling untuk standard catalog dan mapping catalog dari sumber organisasi yang berlisensi/diizinkan.
+5. Mapping revalidation ketika edition standard berubah agar reuse lama tidak dianggap valid tanpa review.
+6. Periodic access review/recertification untuk role, permission, dan external audit grants.
+7. Backup, retention, immutable/log-integrity controls, disaster recovery, dan production hardening.
+8. Selective evidence-sharing workflow jika external auditor perlu meminta raw evidence tertentu dengan approval eksplisit, bukan akses massal.
