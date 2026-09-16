@@ -21,4 +21,7 @@ class Control extends Model
     public function evidences(): BelongsToMany { return $this->belongsToMany(Evidence::class, 'control_evidence'); }
     public function risks(): BelongsToMany { return $this->belongsToMany(Risk::class); }
     public function soaEntries(): HasMany { return $this->hasMany(StatementOfApplicability::class); }
+    public function mappingsAsA(): HasMany { return $this->hasMany(ControlMapping::class, 'control_a_id'); }
+    public function mappingsAsB(): HasMany { return $this->hasMany(ControlMapping::class, 'control_b_id'); }
+    public function evidenceReuses(): HasMany { return $this->hasMany(EvidenceReuse::class, 'target_control_id'); }
 }

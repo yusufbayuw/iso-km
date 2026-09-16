@@ -23,4 +23,5 @@ class Evidence extends Model
     public function documents(): BelongsToMany { return $this->belongsToMany(Document::class, 'document_evidence'); }
     public function suppliers(): BelongsToMany { return $this->belongsToMany(Supplier::class); }
     public function requests(): HasMany { return $this->hasMany(EvidenceRequest::class); }
+    public function reuses(): HasMany { return $this->hasMany(EvidenceReuse::class); }
 }

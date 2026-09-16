@@ -6,6 +6,7 @@ use App\Models\AuditFinding;
 use App\Models\CompetencyRecord;
 use App\Models\Document;
 use App\Models\Evidence;
+use App\Models\EvidenceReuse;
 use App\Models\ManagementSystem;
 use App\Models\RequirementAssessment;
 use App\Models\Risk;
@@ -30,7 +31,8 @@ class TraceabilityMatrixService
             'summary' => [
                 'requirements' => $rows->count(),
                 'gaps' => $rows->whereIn('assessment_status', ['not_assessed', 'nonconformant'])->count(),
-                'evidence_gaps' => $rows->where('verified_fresh_evidence', 0)->count(),
+                'evidence_gaps' => $rows->where('verified_fresh_evidence_total', 0)->count(),
+                'reused_evidence' => $rows->sum('verified_fresh_reused_evidence'),
                 'attention' => $rows->where('attention_state', 'attention')->count(),
                 'supported' => $rows->where('attention_state', 'supported')->count(),
             ],
@@ -51,6 +53,17 @@ class TraceabilityMatrixService
         $evidences = Evidence::query()->where('management_system_id', $system->id)->where('status', '!=', 'archived');
         $this->whereLinked($evidences, $requirement->id, $controlIds);
         $evidences = $evidences->get();
+
+        $reuses = EvidenceReuse::query()->accepted()
+            ->where('target_management_system_id', $system->id)
+            ->where(function (Builder $query) use ($requirement, $controlIds): void {
+                $query->where('target_requirement_id', $requirement->id);
+                if ($controlIds !== []) {
+                    $query->orWhereIn('target_control_id', $controlIds);
+                }
+            })
+            ->with('evidence')
+            ->get();
 
         $risks = Risk::query()->where('management_system_id', $system->id)->where('status', '!=', 'closed');
         $this->whereLinked($risks, $requirement->id, $controlIds);
@@ -81,11 +94,9 @@ class TraceabilityMatrixService
             ->with('correctiveActions')
             ->get();
 
-        $verifiedFresh = $evidences->filter(fn (Evidence $evidence) =>
-            $evidence->verification_status === 'verified'
-            && $evidence->status === 'active'
-            && (! $evidence->expires_at || $evidence->expires_at->gte(today()))
-        )->count();
+        $verifiedFresh = $evidences->filter(fn (Evidence $evidence) => $this->isVerifiedFresh($evidence))->count();
+        $verifiedReused = $reuses->filter(fn (EvidenceReuse $reuse) => $reuse->evidence && $this->isVerifiedFresh($reuse->evidence))->unique('evidence_id')->count();
+        $verifiedTotal = $verifiedFresh + $verifiedReused;
 
         $highRisks = $risks->filter(function (Risk $risk): bool {
             $score = $risk->residual_score ?? $risk->inherent_score ?? 0;
@@ -98,14 +109,11 @@ class TraceabilityMatrixService
         })->count();
 
         $openFindings = $findings->where('status', '!=', 'closed')->count();
-        $openCapa = $findings
-            ->flatMap->correctiveActions
-            ->whereNotIn('status', ['closed', 'verified', 'completed'])
-            ->count();
+        $openCapa = $findings->flatMap->correctiveActions->whereNotIn('status', ['closed', 'verified', 'completed'])->count();
 
         $attentionState = $this->attentionState(
             assessmentStatus: $assessment->status,
-            verifiedFreshEvidence: $verifiedFresh,
+            verifiedFreshEvidence: $verifiedTotal,
             highRisks: $highRisks,
             highRiskSuppliers: $highRiskSuppliers,
             openFindings: $openFindings,
@@ -123,6 +131,9 @@ class TraceabilityMatrixService
             'effective_documents' => $documents->where('status', 'effective')->count(),
             'evidences' => $evidences->count(),
             'verified_fresh_evidence' => $verifiedFresh,
+            'reused_evidence' => $reuses->count(),
+            'verified_fresh_reused_evidence' => $verifiedReused,
+            'verified_fresh_evidence_total' => $verifiedTotal,
             'open_risks' => $risks->count(),
             'high_risks' => $highRisks,
             'training_programs' => $trainingPrograms->count(),
@@ -144,11 +155,17 @@ class TraceabilityMatrixService
         ];
     }
 
+    private function isVerifiedFresh(Evidence $evidence): bool
+    {
+        return $evidence->verification_status === 'verified'
+            && $evidence->status === 'active'
+            && (! $evidence->expires_at || $evidence->expires_at->gte(today()));
+    }
+
     private function whereLinked(Builder $query, int $requirementId, array $controlIds): void
     {
         $query->where(function (Builder $query) use ($requirementId, $controlIds): void {
             $query->whereHas('requirements', fn (Builder $query) => $query->where('requirements.id', $requirementId));
-
             if ($controlIds !== []) {
                 $query->orWhereHas('controls', fn (Builder $query) => $query->whereIn('controls.id', $controlIds));
             }
@@ -157,18 +174,9 @@ class TraceabilityMatrixService
 
     private function attentionState(string $assessmentStatus, int $verifiedFreshEvidence, int $highRisks, int $highRiskSuppliers, int $openFindings, int $openCapa): string
     {
-        if (in_array($assessmentStatus, ['not_assessed', 'nonconformant'], true)) {
-            return 'gap';
-        }
-
-        if ($highRisks > 0 || $highRiskSuppliers > 0 || $openFindings > 0 || $openCapa > 0) {
-            return 'attention';
-        }
-
-        if ($verifiedFreshEvidence === 0) {
-            return 'needs_evidence';
-        }
-
+        if (in_array($assessmentStatus, ['not_assessed', 'nonconformant'], true)) { return 'gap'; }
+        if ($highRisks > 0 || $highRiskSuppliers > 0 || $openFindings > 0 || $openCapa > 0) { return 'attention'; }
+        if ($verifiedFreshEvidence === 0) { return 'needs_evidence'; }
         return $assessmentStatus === 'conformant' ? 'supported' : 'review';
     }
 

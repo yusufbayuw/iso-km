@@ -20,6 +20,8 @@ class ManagementSystem extends Model
     public function evidences(): HasMany { return $this->hasMany(Evidence::class); }
     public function evidenceSchedules(): HasMany { return $this->hasMany(EvidenceSchedule::class); }
     public function evidenceRequests(): HasMany { return $this->hasMany(EvidenceRequest::class); }
+    public function evidenceReuses(): HasMany { return $this->hasMany(EvidenceReuse::class, 'target_management_system_id'); }
+    public function externalAuditAccesses(): HasMany { return $this->hasMany(ExternalAuditAccess::class); }
     public function actionItems(): HasMany { return $this->hasMany(ActionItem::class); }
     public function assuranceSnapshot(): HasOne { return $this->hasOne(AssuranceSnapshot::class); }
     public function risks(): HasMany { return $this->hasMany(Risk::class); }

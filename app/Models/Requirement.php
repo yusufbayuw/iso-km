@@ -19,4 +19,7 @@ class Requirement extends Model
     public function documents(): BelongsToMany { return $this->belongsToMany(Document::class); }
     public function evidences(): BelongsToMany { return $this->belongsToMany(Evidence::class, 'evidence_requirement'); }
     public function risks(): BelongsToMany { return $this->belongsToMany(Risk::class, 'requirement_risk'); }
+    public function mappingsAsA(): HasMany { return $this->hasMany(RequirementMapping::class, 'requirement_a_id'); }
+    public function mappingsAsB(): HasMany { return $this->hasMany(RequirementMapping::class, 'requirement_b_id'); }
+    public function evidenceReuses(): HasMany { return $this->hasMany(EvidenceReuse::class, 'target_requirement_id'); }
 }
