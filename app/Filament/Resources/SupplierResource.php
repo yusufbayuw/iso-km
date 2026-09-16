@@ -25,7 +25,7 @@ class SupplierResource extends Resource
             Forms\Components\TextInput::make('code')->label('Kode')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('name')->label('Nama Supplier')->required(),
             Forms\Components\TextInput::make('category')->label('Kategori'),
-            Forms\Components\Select::make('owner_id')->label('Owner Internal')->relationship('owner', 'name')->searchable()->preload(),
+            Forms\Components\Select::make('owner_id')->label('Owner Internal')->relationship('owner', 'name')->required()->searchable()->preload(),
             Forms\Components\Select::make('criticality')->label('Criticality')->options(['low' => 'Low','medium' => 'Medium','high' => 'High','critical' => 'Critical'])->required()->default('medium'),
             Forms\Components\Select::make('status')->label('Status')->options(['active' => 'Aktif','inactive' => 'Tidak Aktif','suspended' => 'Suspended','terminated' => 'Terminated'])->required()->default('active'),
             Forms\Components\TextInput::make('contact_name')->label('Kontak'),
@@ -51,7 +51,10 @@ class SupplierResource extends Resource
             Tables\Columns\TextColumn::make('next_review_at')->label('Review')->date('d/m/Y')->placeholder('-')->sortable(),
             Tables\Columns\TextColumn::make('assessments_count')->label('Assessment')->counts('assessments'),
             Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make()->visible(fn (Supplier $record): bool => ! $record->assessments()->exists()),
+        ]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageSuppliers::route('/')]; }
