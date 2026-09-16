@@ -27,4 +27,8 @@ class ManagementSystem extends Model
     public function objectives(): HasMany { return $this->hasMany(Objective::class); }
     public function complianceObligations(): BelongsToMany { return $this->belongsToMany(ComplianceObligation::class); }
     public function managementReviews(): HasMany { return $this->hasMany(ManagementReview::class); }
+    public function trainingPrograms(): HasMany { return $this->hasMany(TrainingProgram::class); }
+    public function competencyRecords(): HasMany { return $this->hasMany(CompetencyRecord::class); }
+    public function suppliers(): BelongsToMany { return $this->belongsToMany(Supplier::class); }
+    public function supplierAssessments(): HasMany { return $this->hasMany(SupplierAssessment::class); }
 }

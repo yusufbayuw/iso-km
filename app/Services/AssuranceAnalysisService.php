@@ -6,11 +6,14 @@ use App\Models\ActionItem;
 use App\Models\AssuranceSnapshot;
 use App\Models\Audit;
 use App\Models\AuditFinding;
+use App\Models\CompetencyRecord;
 use App\Models\Evidence;
 use App\Models\ManagementSystem;
 use App\Models\RequirementAssessment;
 use App\Models\Risk;
 use App\Models\StatementOfApplicability;
+use App\Models\SupplierAssessment;
+use App\Models\TrainingAssignment;
 
 class AssuranceAnalysisService
 {
@@ -95,6 +98,24 @@ class AssuranceAnalysisService
         $overdueActions = (clone $actions)->whereNotNull('due_at')->where('due_at', '<', now())->count();
         $actionHealth = $openActions === 0 ? 100.0 : max(0.0, 100.0 - (($overdueActions / $openActions) * 100.0));
 
+        $overdueMandatoryTraining = TrainingAssignment::query()
+            ->whereHas('program', fn ($query) => $query->where('management_system_id', $system->id)->where('mandatory', true))
+            ->whereNotIn('status', ['completed', 'passed', 'exempt'])
+            ->whereNotNull('due_at')->whereDate('due_at', '<', today())->count();
+        $competenceDue = CompetencyRecord::query()
+            ->where('management_system_id', $system->id)
+            ->whereIn('status', ['active', 'expiring'])
+            ->whereNotNull('valid_until')->whereDate('valid_until', '<=', today()->addDays(30))->count();
+        $latestSupplierAssessments = SupplierAssessment::query()
+            ->where('management_system_id', $system->id)
+            ->orderByDesc('assessed_at')->orderByDesc('id')->get()->unique('supplier_id');
+        $highRiskSuppliers = $latestSupplierAssessments
+            ->whereIn('risk_rating', ['high', 'critical'])
+            ->whereNotIn('status', ['rejected', 'closed'])->count();
+        $supplierReviewsDue = $latestSupplierAssessments
+            ->filter(fn (SupplierAssessment $assessment) => $assessment->next_review_at && $assessment->next_review_at->lte(today()->addDays(30)))
+            ->count();
+
         $confidencePoints = 0;
         $confidencePoints += $assessmentTotal > 0 && $requirementReadiness >= 80 ? 1 : 0;
         $confidencePoints += $applicableTotal > 0 && $controlImplementation >= 80 ? 2 : ($applicableTotal > 0 && $controlImplementation >= 50 ? 1 : 0);
@@ -129,6 +150,10 @@ class AssuranceAnalysisService
                     'unverified_evidence' => Evidence::query()->where('management_system_id', $system->id)->where('verification_status', '!=', 'verified')->where('status', '!=', 'archived')->count(),
                     'risks_registered' => $riskTotal,
                     'completed_audits' => $completedAudits,
+                    'overdue_mandatory_training' => $overdueMandatoryTraining,
+                    'competence_due' => $competenceDue,
+                    'high_risk_suppliers' => $highRiskSuppliers,
+                    'supplier_reviews_due' => $supplierReviewsDue,
                 ],
                 'calculated_at' => now(),
             ],

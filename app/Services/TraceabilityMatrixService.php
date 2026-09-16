@@ -3,11 +3,14 @@
 namespace App\Services;
 
 use App\Models\AuditFinding;
+use App\Models\CompetencyRecord;
 use App\Models\Document;
 use App\Models\Evidence;
 use App\Models\ManagementSystem;
 use App\Models\RequirementAssessment;
 use App\Models\Risk;
+use App\Models\Supplier;
+use App\Models\TrainingProgram;
 use Illuminate\Database\Eloquent\Builder;
 
 class TraceabilityMatrixService
@@ -53,6 +56,20 @@ class TraceabilityMatrixService
         $this->whereLinked($risks, $requirement->id, $controlIds);
         $risks = $risks->get();
 
+        $trainingPrograms = TrainingProgram::query()->where('management_system_id', $system->id)->where('status', 'active');
+        $this->whereLinked($trainingPrograms, $requirement->id, $controlIds);
+        $trainingPrograms = $trainingPrograms->get();
+
+        $competencies = CompetencyRecord::query()->where('management_system_id', $system->id)->whereIn('status', ['active', 'expiring']);
+        $this->whereLinked($competencies, $requirement->id, $controlIds);
+        $competencies = $competencies->get();
+
+        $suppliers = Supplier::query()
+            ->where('status', 'active')
+            ->whereHas('managementSystems', fn (Builder $query) => $query->where('management_systems.id', $system->id));
+        $this->whereLinked($suppliers, $requirement->id, $controlIds);
+        $suppliers = $suppliers->with(['assessments' => fn ($query) => $query->where('management_system_id', $system->id)->orderByDesc('assessed_at')->orderByDesc('id')])->get();
+
         $findings = AuditFinding::query()
             ->whereHas('audit', fn (Builder $query) => $query->where('management_system_id', $system->id))
             ->where(function (Builder $query) use ($requirement, $controlIds): void {
@@ -75,6 +92,11 @@ class TraceabilityMatrixService
             return (int) $score >= 12;
         })->count();
 
+        $highRiskSuppliers = $suppliers->filter(function (Supplier $supplier): bool {
+            $latest = $supplier->assessments->first();
+            return $latest && in_array($latest->risk_rating, ['high', 'critical'], true) && ! in_array($latest->status, ['rejected', 'closed'], true);
+        })->count();
+
         $openFindings = $findings->where('status', '!=', 'closed')->count();
         $openCapa = $findings
             ->flatMap->correctiveActions
@@ -85,6 +107,7 @@ class TraceabilityMatrixService
             assessmentStatus: $assessment->status,
             verifiedFreshEvidence: $verifiedFresh,
             highRisks: $highRisks,
+            highRiskSuppliers: $highRiskSuppliers,
             openFindings: $openFindings,
             openCapa: $openCapa,
         );
@@ -102,6 +125,10 @@ class TraceabilityMatrixService
             'verified_fresh_evidence' => $verifiedFresh,
             'open_risks' => $risks->count(),
             'high_risks' => $highRisks,
+            'training_programs' => $trainingPrograms->count(),
+            'competence_records' => $competencies->count(),
+            'suppliers' => $suppliers->count(),
+            'high_risk_suppliers' => $highRiskSuppliers,
             'open_findings' => $openFindings,
             'open_capa' => $openCapa,
             'next_review_at' => $assessment->next_review_at?->toDateString(),
@@ -128,13 +155,13 @@ class TraceabilityMatrixService
         });
     }
 
-    private function attentionState(string $assessmentStatus, int $verifiedFreshEvidence, int $highRisks, int $openFindings, int $openCapa): string
+    private function attentionState(string $assessmentStatus, int $verifiedFreshEvidence, int $highRisks, int $highRiskSuppliers, int $openFindings, int $openCapa): string
     {
         if (in_array($assessmentStatus, ['not_assessed', 'nonconformant'], true)) {
             return 'gap';
         }
 
-        if ($highRisks > 0 || $openFindings > 0 || $openCapa > 0) {
+        if ($highRisks > 0 || $highRiskSuppliers > 0 || $openFindings > 0 || $openCapa > 0) {
             return 'attention';
         }
 
