@@ -115,7 +115,11 @@ class ExternalAuditCrossStandardTest extends TestCase
         $this->assertSame(1, $row['verified_fresh_evidence_total']);
         $this->assertSame('supported', $row['attention_state']);
 
-        $this->actingAs($manager)->get('/portal/cross-standard-workspace')->assertOk()->assertSee('Shared governance evidence');
+        $this->actingAs($manager)
+            ->get('/portal/cross-standard-workspace?managementSystemId='.$target->id)
+            ->assertOk()
+            ->assertSee('Shared governance evidence')
+            ->assertSee('Accepted');
     }
 
     public function test_mapping_within_same_standard_is_rejected(): void
