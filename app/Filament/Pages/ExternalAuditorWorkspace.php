@@ -40,12 +40,9 @@ class ExternalAuditorWorkspace extends Page
             Action::make('externalAuditPack')
                 ->label('Download Read-Only Audit Pack')
                 ->icon('heroicon-o-arrow-down-tray')
-                ->visible(function (): bool {
-                    if (! $this->managementSystemId || ! (auth()->user()?->can('external_audit_pack.export') ?? false)) { return false; }
-                    if (auth()->user()?->can('external_audit_access.manage')) { return true; }
-                    return (bool) $this->currentAccess()?->allow_audit_pack;
-                })
+                ->visible(fn (): bool => $this->canExportCurrentPack())
                 ->action(function (ExternalAuditPackService $service) {
+                    abort_unless($this->canExportCurrentPack(), 403);
                     $system = $this->resolveSystem();
                     $path = $service->generate($system);
                     return response()->download($path, basename($path))->deleteFileAfterSend(true);
@@ -82,6 +79,14 @@ class ExternalAuditorWorkspace extends Page
         if (! $this->managementSystemId || auth()->user()?->can('external_audit_access.manage')) { return null; }
         return ExternalAuditAccess::query()->currentlyActive()
             ->where('user_id', auth()->id())->where('management_system_id', $this->managementSystemId)->latest('id')->first();
+    }
+
+    private function canExportCurrentPack(): bool
+    {
+        $user = auth()->user();
+        if (! $this->managementSystemId || ! ($user?->can('external_audit_pack.export') ?? false)) { return false; }
+        if ($user->can('external_audit_access.manage')) { return true; }
+        return (bool) $this->currentAccess()?->allow_audit_pack;
     }
 
     private function resolveSystem(): ManagementSystem
