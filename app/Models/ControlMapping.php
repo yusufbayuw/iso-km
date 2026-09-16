@@ -13,6 +13,13 @@ class ControlMapping extends Model
     use AuditsChanges;
 
     protected $fillable = ['control_a_id','control_b_id','mapping_type','coverage_percent','rationale','status','mapped_by','reviewed_by','reviewed_at'];
+
+    protected $attributes = [
+        'mapping_type' => 'related',
+        'coverage_percent' => 50,
+        'status' => 'draft',
+    ];
+
     protected function casts(): array { return ['coverage_percent' => 'integer', 'reviewed_at' => 'datetime']; }
 
     protected static function booted(): void
