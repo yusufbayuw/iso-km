@@ -18,9 +18,7 @@ class DocumentWorkflowService
         $this->assertStatus($revision, ['draft', 'rejected']);
 
         if (! $revision->reviewer_id) {
-            throw ValidationException::withMessages([
-                'reviewer_id' => 'Reviewer wajib ditentukan sebelum dokumen diajukan untuk review.',
-            ]);
+            throw ValidationException::withMessages(['reviewer_id' => 'Reviewer wajib ditentukan sebelum dokumen diajukan untuk review.']);
         }
 
         $revision->update([
@@ -96,9 +94,7 @@ class DocumentWorkflowService
         $this->assertStatus($revision, ['reviewed']);
 
         if (! $revision->approver_id) {
-            throw ValidationException::withMessages([
-                'approver_id' => 'Approver wajib ditentukan sebelum dokumen disetujui.',
-            ]);
+            throw ValidationException::withMessages(['approver_id' => 'Approver wajib ditentukan sebelum dokumen disetujui.']);
         }
 
         if ($revision->approver_id !== $actor->id && ! $actor->can('document.approve_any')) {
@@ -139,6 +135,12 @@ class DocumentWorkflowService
                     ]);
                 });
 
+            DocumentDistribution::query()
+                ->where('document_id', $revision->document_id)
+                ->where('document_revision_id', '!=', $revision->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'superseded']);
+
             $revision->update([
                 'status' => 'effective',
                 'effective_at' => $effectiveDate ?: today(),
@@ -151,10 +153,7 @@ class DocumentWorkflowService
                 'next_review_at' => today()->addMonths($revision->document->review_frequency_months ?: 12),
             ]);
 
-            $userIds = $revision->document->distributions()
-                ->pluck('user_id')
-                ->unique()
-                ->values();
+            $userIds = $revision->document->distributions()->pluck('user_id')->unique()->values();
 
             foreach ($userIds as $userId) {
                 $distribution = DocumentDistribution::query()->updateOrCreate([
@@ -179,6 +178,30 @@ class DocumentWorkflowService
         });
     }
 
+    public function acknowledge(DocumentDistribution $distribution, User $actor): DocumentDistribution
+    {
+        $this->authorize($actor, 'document.acknowledge');
+
+        if ($distribution->user_id !== $actor->id) {
+            throw new AuthorizationException('Controlled copy ini didistribusikan kepada pengguna lain.');
+        }
+
+        if ($distribution->status !== 'pending') {
+            throw ValidationException::withMessages(['status' => 'Dokumen ini tidak lagi menunggu acknowledgement.']);
+        }
+
+        if ($distribution->revision?->status !== 'effective') {
+            throw ValidationException::withMessages(['revision' => 'Hanya controlled copy yang masih efektif yang dapat di-acknowledge.']);
+        }
+
+        $distribution->update([
+            'acknowledged_at' => now(),
+            'status' => 'acknowledged',
+        ]);
+
+        return $distribution->refresh();
+    }
+
     public function obsolete(DocumentRevision $revision, User $actor): DocumentRevision
     {
         $this->authorize($actor, 'document.obsolete');
@@ -190,6 +213,11 @@ class DocumentWorkflowService
                 'is_current' => false,
                 'obsolete_at' => today(),
             ]);
+
+            DocumentDistribution::query()
+                ->where('document_revision_id', $revision->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'superseded']);
 
             $revision->document->update([
                 'status' => 'obsolete',
@@ -203,9 +231,7 @@ class DocumentWorkflowService
     private function assertStatus(DocumentRevision $revision, array $allowed): void
     {
         if (! in_array($revision->status, $allowed, true)) {
-            throw ValidationException::withMessages([
-                'status' => "Transisi tidak valid dari status {$revision->status}.",
-            ]);
+            throw ValidationException::withMessages(['status' => "Transisi tidak valid dari status {$revision->status}."]);
         }
     }
 

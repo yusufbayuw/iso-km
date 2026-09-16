@@ -50,11 +50,19 @@ class ActionItemSyncService
         ComplianceObligation::query()->where('status', 'active')->whereNotNull('next_review_at')->whereDate('next_review_at', '<=', $attentionHorizon)->each(fn (ComplianceObligation $item) => $changes += $this->project($item, 'compliance_review', $item->owner_id, $item->managementSystems()->value('management_systems.id'), 'Review kewajiban kepatuhan '.$item->code, $item->title, $item->next_review_at));
         ManagementReview::query()->whereIn('status', ['planned', 'scheduled'])->whereNotNull('scheduled_at')->whereDate('scheduled_at', '<=', $attentionHorizon)->each(fn (ManagementReview $item) => $changes += $this->project($item, 'management_review', $item->chairperson_id, $item->management_system_id, 'Persiapan management review '.$item->code, $item->title, $item->scheduled_at));
 
-        TrainingAssignment::query()->with('program')->whereNotIn('status', ['completed', 'passed', 'exempt'])->each(fn (TrainingAssignment $item) => $changes += $this->project($item, 'training_assignment', $item->user_id, $item->program?->management_system_id, 'Selesaikan training '.($item->program?->code ?? ''), $item->program?->title, $item->due_at));
+        TrainingAssignment::query()->with('program')->whereIn('status', ['assigned', 'in_progress', 'failed', 'rejected'])->each(fn (TrainingAssignment $item) => $changes += $this->project($item, 'training_assignment', $item->user_id, $item->program?->management_system_id, 'Selesaikan training '.($item->program?->code ?? ''), $item->program?->title, $item->due_at));
+        TrainingAssignment::query()->with(['program', 'user'])->where('status', 'submitted')->each(fn (TrainingAssignment $item) => $changes += $this->project($item, 'training_verification', $item->program?->owner_id, $item->program?->management_system_id, 'Verifikasi training '.($item->program?->code ?? ''), $item->user?->name, $item->due_at));
         CompetencyRecord::query()->whereIn('status', ['active', 'expiring'])->whereNotNull('valid_until')->whereDate('valid_until', '<=', $attentionHorizon)->each(fn (CompetencyRecord $item) => $changes += $this->project($item, 'competency_renewal', $item->user_id, $item->management_system_id, 'Perbarui kompetensi: '.$item->competency, 'Valid sampai '.$item->valid_until?->format('d/m/Y'), $item->valid_until));
+
         Supplier::query()->where('status', 'active')->whereNotNull('next_review_at')->whereDate('next_review_at', '<=', $attentionHorizon)->each(fn (Supplier $item) => $changes += $this->project($item, 'supplier_review', $item->owner_id, $item->managementSystems()->value('management_systems.id'), 'Review supplier '.$item->code, $item->name, $item->next_review_at));
-        SupplierAssessment::query()->with('supplier')->whereNotNull('next_review_at')->whereDate('next_review_at', '<=', $attentionHorizon)->whereNotIn('status', ['rejected', 'closed'])->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_assessment', $item->supplier?->owner_id, $item->management_system_id, 'Assessment ulang supplier '.($item->supplier?->code ?? ''), $item->supplier?->name, $item->next_review_at));
-        SupplierAssessment::query()->with('supplier')->whereIn('risk_rating', ['high', 'critical'])->whereNotIn('status', ['rejected', 'closed'])->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_treatment', $item->supplier?->owner_id, $item->management_system_id, 'Tangani risiko supplier '.($item->supplier?->code ?? ''), $item->required_actions ?: $item->summary, $item->next_review_at));
+        SupplierAssessment::query()->with('supplier')->whereIn('status', ['requested', 'in_progress'])->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_assessment_execution', $item->supplier?->owner_id, $item->management_system_id, 'Laksanakan assessment supplier '.($item->supplier?->code ?? ''), $item->supplier?->name, $item->next_review_at));
+        SupplierAssessment::query()->with('supplier')->where('status', 'submitted')->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_assessment_review', $item->supplier?->owner_id, $item->management_system_id, 'Koordinasikan review assessment supplier '.($item->supplier?->code ?? ''), $item->summary, $item->next_review_at));
+        SupplierAssessment::query()->with('supplier')->whereIn('status', ['accepted', 'conditional'])->whereNotNull('next_review_at')->whereDate('next_review_at', '<=', $attentionHorizon)->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_assessment', $item->supplier?->owner_id, $item->management_system_id, 'Assessment ulang supplier '.($item->supplier?->code ?? ''), $item->supplier?->name, $item->next_review_at));
+        SupplierAssessment::query()->with('supplier')->whereNull('treatment_verified_at')->where(function ($query): void {
+            $query->where('status', 'conditional')->orWhere(function ($query): void {
+                $query->where('status', 'accepted')->whereIn('risk_rating', ['high', 'critical']);
+            });
+        })->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_treatment', $item->supplier?->owner_id, $item->management_system_id, 'Tangani risiko supplier '.($item->supplier?->code ?? ''), $item->required_actions ?: $item->summary, $item->next_review_at));
 
         $stale = ActionItem::query()->where('is_generated', true)->where('status', '!=', 'completed')->when($this->seen !== [], fn ($query) => $query->whereNotIn('action_key', array_keys($this->seen)))->update(['status' => 'completed', 'completed_at' => now()]);
 
@@ -75,9 +83,18 @@ class ActionItemSyncService
 
     private function priority(mixed $dueAt, string $category): string
     {
-        if (in_array($category, ['objective_review', 'risk_treatment', 'requirement_gap', 'supplier_treatment'], true)) { return 'high'; }
-        if (! $dueAt) { return 'medium'; }
+        if (in_array($category, ['objective_review', 'risk_treatment', 'requirement_gap', 'supplier_treatment'], true)) {
+            return 'high';
+        }
+        if (! $dueAt) {
+            return 'medium';
+        }
         $days = today()->diffInDays($dueAt, false);
-        return match (true) { $days < 0 => 'critical', $days <= 3 => 'high', $days <= 14 => 'medium', default => 'low' };
+        return match (true) {
+            $days < 0 => 'critical',
+            $days <= 3 => 'high',
+            $days <= 14 => 'medium',
+            default => 'low',
+        };
     }
 }
