@@ -138,6 +138,8 @@ return new class extends Migration
             $table->unsignedTinyInteger('risk_score')->default(1);
             $table->foreignId('risk_owner_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status')->default('submitted');
+            $table->string('baseline_status')->nullable();
+            $table->timestamp('baseline_updated_at')->nullable();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('approved_at')->nullable();
             $table->timestamp('synced_at')->nullable();
