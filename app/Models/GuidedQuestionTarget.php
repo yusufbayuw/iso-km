@@ -14,6 +14,9 @@ class GuidedQuestionTarget extends Model
     protected static function booted(): void
     {
         static::saving(function (self $target): void {
+            if ($target->question()->with('bank')->first()?->bank?->status !== 'draft') {
+                throw ValidationException::withMessages(['target' => 'Kriteria bank terbit tidak dapat diubah.']);
+            }
             if (($target->requirement_id === null) === ($target->control_id === null)) {
                 throw ValidationException::withMessages(['target' => 'Pilih tepat satu requirement atau control.']);
             }
