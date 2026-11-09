@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActionItem;
 use App\Models\ComplianceScope;
 use App\Models\Control;
 use App\Models\Evidence;
@@ -14,6 +15,7 @@ use App\Models\Requirement;
 use App\Models\Standard;
 use App\Models\StatementOfApplicability;
 use App\Models\User;
+use App\Services\ActionItemSyncService;
 use App\Services\GuidedAssessmentWorkflowService;
 use App\Services\GuidedQuestionBankService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -149,6 +151,32 @@ class GuidedAssessmentWorkflowTest extends TestCase
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('authorization', $exception->errors());
         }
+    }
+
+    public function test_interview_and_approval_are_projected_into_existing_my_work(): void
+    {
+        extract($this->setupAssessment());
+        $respondent = $this->actor('Interviewer', ['guided.answer.submit']);
+        $assessor = $this->actor('Approver', ['guided.assessment.review']);
+        $run->memberships()->create(['user_id' => $assessor->id, 'role' => 'assessor']);
+        $service = app(GuidedAssessmentWorkflowService::class);
+        $assignment = $service->assign($run, $question, $respondent, $coordinator);
+        app(ActionItemSyncService::class)->sync();
+        $interview = ActionItem::query()->where('category', 'guided_interview')->firstOrFail();
+        $this->assertSame($respondent->id, $interview->owner_id);
+
+        $answer = $service->submitAnswer($assignment, $respondent, ['value' => 'no']);
+        app(ActionItemSyncService::class)->sync();
+        $this->assertSame('completed', $interview->refresh()->status);
+
+        $consolidation = $service->consolidate($run, $question, $coordinator, [$answer->id], 'Belum ada backup.', 'select');
+        $decision = $service->propose($consolidation, $controlTarget, $coordinator, 'not_started', 2, 'Tidak ada implementasi.');
+        app(ActionItemSyncService::class)->sync();
+        $review = ActionItem::query()->where('category', 'guided_review')->firstOrFail();
+        $this->assertSame($assessor->id, $review->owner_id);
+        $service->approve($decision, $assessor, 'Belum diterapkan berdasarkan wawancara terkonfirmasi.');
+        app(ActionItemSyncService::class)->sync();
+        $this->assertSame('completed', $review->refresh()->status);
     }
 
     public function test_lock_requires_all_mapped_targets(): void
