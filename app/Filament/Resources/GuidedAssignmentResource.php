@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\GuidedAssignmentResource\Pages;
+use App\Models\Evidence;
+use App\Models\GuidedAssignment;
+use App\Services\GuidedAssessmentWorkflowService;
+use Filament\Forms;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+class GuidedAssignmentResource extends Resource
+{
+    protected static ?string $model = GuidedAssignment::class;
+    protected static ?string $navigationIcon = 'heroicon-o-pencil-square';
+    protected static ?string $navigationGroup = 'Guided Assessment';
+    protected static ?string $navigationLabel = 'Wawancara Saya';
+    protected static ?int $navigationSort = 2;
+
+    public static function canViewAny(): bool { return auth()->user()?->can('guided.answer.submit') ?? false; }
+    public static function canCreate(): bool { return false; }
+    public static function canEdit($record): bool { return false; }
+    public static function canDelete($record): bool { return false; }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id())->with(['assessment', 'question']);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table->columns([
+            Tables\Columns\TextColumn::make('assessment.name')->label('Asesmen')->wrap(),
+            Tables\Columns\TextColumn::make('question.code')->label('Kode')->searchable(),
+            Tables\Columns\TextColumn::make('question.prompt')->label('Pertanyaan')->wrap()->limit(110),
+            Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
+            Tables\Columns\TextColumn::make('answers_count')->label('Jawaban Terkirim')->counts('answers'),
+            Tables\Columns\TextColumn::make('due_at')->label('Target')->date('d/m/Y')->placeholder('-'),
+        ])->actions([
+            Tables\Actions\Action::make('answer')->label('Kirim Jawaban')->icon('heroicon-o-chat-bubble-left-right')
+                ->visible(fn (GuidedAssignment $record) => ! $record->assessment->locked_at)
+                ->form([
+                    Forms\Components\Placeholder::make('help')->label('Petunjuk')->content(fn (GuidedAssignment $record) => $record->question->help_text ?: $record->question->prompt),
+                    Forms\Components\TextInput::make('context_key')->label('Konteks / Sistem / Aset')->default('general')->required()
+                        ->helperText('Gunakan konteks berbeda untuk jawaban atas objek yang berbeda.'),
+                    Forms\Components\TextInput::make('value')->label('Jawaban')->required()->maxLength(2000)
+                        ->helperText('Untuk pilihan tunggal gunakan salah satu pilihan yang ditentukan bank pertanyaan.'),
+                    Forms\Components\Textarea::make('notes')->label('Keterangan Tambahan'),
+                    Forms\Components\Select::make('evidence_ids')->label('Evidence Terlampir')->multiple()->searchable()
+                        ->options(fn (GuidedAssignment $record) => Evidence::query()
+                            ->where('management_system_id', $record->assessment->management_system_id)
+                            ->when(! auth()->user()?->can('view_any_evidence'), fn ($q) => $q->whereRaw('1 = 0'))
+                            ->pluck('title', 'id')->all()),
+                ])->action(function (GuidedAssignment $record, array $data): void {
+                    app(GuidedAssessmentWorkflowService::class)->submitAnswer($record, auth()->user(),
+                        ['value' => $data['value']], $data['context_key'], $data['notes'] ?? null, $data['evidence_ids'] ?? []);
+                    Notification::make()->success()->title('Jawaban tersimpan sebagai entri baru')->send();
+                }),
+        ]);
+    }
+
+    public static function getPages(): array { return ['index' => Pages\ListGuidedAssignments::route('/')]; }
+}
