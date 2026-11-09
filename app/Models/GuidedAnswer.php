@@ -4,10 +4,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Validation\ValidationException;
 
 class GuidedAnswer extends Model
 {
     public $timestamps = true;
+    protected static function booted(): void
+    {
+        static::updating(fn () => throw ValidationException::withMessages(['answer' => 'Jawaban bersifat immutable. Buat entri revisi baru.']));
+        static::deleting(fn () => throw ValidationException::withMessages(['answer' => 'Jawaban historis tidak dapat dihapus.']));
+    }
     protected $fillable = ['guided_assessment_id', 'guided_question_id', 'guided_assignment_id', 'respondent_id', 'context_key', 'response', 'notes', 'supersedes_id', 'submitted_at'];
     protected function casts(): array { return ['response' => 'array', 'submitted_at' => 'datetime']; }
     public function assessment(): BelongsTo { return $this->belongsTo(GuidedAssessment::class, 'guided_assessment_id'); }
