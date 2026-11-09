@@ -284,9 +284,23 @@ class GuidedAssessmentWorkflowService
         DB::transaction(function () use ($run): void {
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($run->id);
             $this->assertMutable($run);
-            $decisions = GuidedDecision::query()->whereHas('consolidation', fn ($q) => $q->where('guided_assessment_id', $run->id));
-            if (! (clone $decisions)->exists() || (clone $decisions)->where(function ($q) { $q->where('status', '!=', 'approved')->orWhereNull('synced_at'); })->exists()) {
-                throw ValidationException::withMessages(['assessment' => 'Seluruh keputusan harus disetujui dan dipublikasikan sebelum dikunci.']);
+            $bank = $run->bank;
+            $coverage = app(GuidedQuestionBankService::class)->coverage($bank);
+            if ($bank->status !== 'published' || $coverage['missing_requirements'] || $coverage['missing_controls'] || $coverage['broken_branches'] || $coverage['invalid_questions']) {
+                throw ValidationException::withMessages(['coverage' => 'Bank pertanyaan belum memenuhi pemeriksaan cakupan.']);
+            }
+            if ($run->assignments()->where('status', '!=', 'submitted')->exists() || ! $run->assignments()->exists()) {
+                throw ValidationException::withMessages(['assessment' => 'Seluruh penugasan wajib diselesaikan sebelum finalisasi.']);
+            }
+            $expectedTargets = GuidedQuestionTarget::query()->whereHas('question',
+                fn ($q) => $q->where('guided_question_bank_id', $bank->id))->pluck('id');
+            $decisions = GuidedDecision::query()->whereHas('consolidation',
+                fn ($q) => $q->where('guided_assessment_id', $run->id)->where('is_current', true));
+            $completed = (clone $decisions)->where('status', 'approved')->whereNotNull('synced_at')
+                ->pluck('guided_question_target_id')->unique();
+            if ($expectedTargets->isEmpty() || $expectedTargets->diff($completed)->isNotEmpty()
+                || (clone $decisions)->where(function ($q) { $q->where('status', '!=', 'approved')->orWhereNull('synced_at'); })->exists()) {
+                throw ValidationException::withMessages(['assessment' => 'Semua kriteria wajib memerlukan keputusan aktif yang telah disetujui dan dipublikasikan.']);
             }
             $run->update(['status' => 'locked', 'locked_at' => now()]);
         });
