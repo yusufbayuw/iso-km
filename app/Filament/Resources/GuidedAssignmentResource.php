@@ -47,8 +47,14 @@ class GuidedAssignmentResource extends Resource
                     Forms\Components\Placeholder::make('help')->label('Petunjuk')->content(fn (GuidedAssignment $record) => $record->question->help_text ?: $record->question->prompt),
                     Forms\Components\TextInput::make('context_key')->label('Konteks / Sistem / Aset')->default('general')->required()
                         ->helperText('Gunakan konteks berbeda untuk jawaban atas objek yang berbeda.'),
-                    Forms\Components\TextInput::make('value')->label('Jawaban')->required()->maxLength(2000)
-                        ->helperText('Untuk pilihan tunggal gunakan salah satu pilihan yang ditentukan bank pertanyaan.'),
+                    Forms\Components\Select::make('choice')->label('Pilihan Jawaban')
+                        ->options(fn (GuidedAssignment $record) => array_combine($record->question->answer_options ?? [], $record->question->answer_options ?? []) ?: [])
+                        ->visible(fn (GuidedAssignment $record) => $record->question->answer_type === 'single_choice')
+                        ->required(fn (GuidedAssignment $record) => $record->question->answer_type === 'single_choice'),
+                    Forms\Components\TextInput::make('value')->label('Jawaban')
+                        ->visible(fn (GuidedAssignment $record) => $record->question->answer_type !== 'single_choice')
+                        ->required(fn (GuidedAssignment $record) => $record->question->answer_type !== 'single_choice')
+                        ->maxLength(2000),
                     Forms\Components\Textarea::make('notes')->label('Keterangan Tambahan'),
                     Forms\Components\Select::make('evidence_ids')->label('Evidence Terlampir')->multiple()->searchable()
                         ->options(fn (GuidedAssignment $record) => Evidence::query()
@@ -57,7 +63,7 @@ class GuidedAssignmentResource extends Resource
                             ->pluck('title', 'id')->all()),
                 ])->action(function (GuidedAssignment $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->submitAnswer($record, auth()->user(),
-                        ['value' => $data['value']], $data['context_key'], $data['notes'] ?? null, $data['evidence_ids'] ?? []);
+                        ['value' => $record->question->answer_type === 'single_choice' ? ($data['choice'] ?? '') : ($data['value'] ?? '')], $data['context_key'], $data['notes'] ?? null, $data['evidence_ids'] ?? []);
                     Notification::make()->success()->title('Jawaban tersimpan sebagai entri baru')->send();
                 }),
         ]);
