@@ -8,6 +8,7 @@ use Illuminate\Validation\ValidationException;
 
 class GuidedAssessment extends Model
 {
+    protected $attributes = ['status' => 'draft', 'high_risk_threshold' => 12, 'critical_risk_threshold' => 20];
     protected $fillable = ['management_system_id', 'guided_question_bank_id', 'name', 'status', 'created_by', 'high_risk_threshold', 'critical_risk_threshold', 'started_at', 'locked_at'];
     protected function casts(): array { return ['started_at' => 'datetime', 'locked_at' => 'datetime']; }
 
