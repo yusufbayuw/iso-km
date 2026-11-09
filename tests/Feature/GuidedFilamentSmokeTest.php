@@ -27,7 +27,7 @@ class GuidedFilamentSmokeTest extends TestCase
             'portal.access', 'guided.bank.manage', 'guided.template.manage',
             'guided.assessment.view', 'guided.assessment.manage',
             'guided.answer.submit', 'guided.consolidate',
-            'guided.evidence.review', 'guided.assessment.review',
+            'guided.evidence.review', 'guided.assessment.review', 'guided.report.export',
         ];
         foreach ($permissions as $name) { Permission::findOrCreate($name, 'web'); }
         $user->givePermissionTo($permissions);
