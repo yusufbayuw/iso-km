@@ -28,6 +28,11 @@ class GuidedQuestionTarget extends Model
                 throw ValidationException::withMessages(['target' => 'Target harus berasal dari standard yang sama dengan bank pertanyaan.']);
             }
         });
+        static::deleting(function (self $target): void {
+            if ($target->question()->with('bank')->first()?->bank?->status !== 'draft') {
+                throw ValidationException::withMessages(['target' => 'Kriteria bank terbit tidak dapat dihapus.']);
+            }
+        });
     }
 
     public function question(): BelongsTo { return $this->belongsTo(GuidedQuestion::class, 'guided_question_id'); }
