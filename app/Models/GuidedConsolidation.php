@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GuidedConsolidation extends Model
 {
+    protected $attributes = ['is_current' => true, 'version' => 1];
     protected $fillable = ['guided_assessment_id', 'guided_question_id', 'context_key', 'version', 'is_current', 'method', 'summary', 'reason', 'prepared_by'];
     protected function casts(): array { return ['is_current' => 'boolean']; }
     public function assessment(): BelongsTo { return $this->belongsTo(GuidedAssessment::class, 'guided_assessment_id'); }
