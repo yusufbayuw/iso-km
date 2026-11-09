@@ -4,6 +4,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 
 class GuidedAssessment extends Model
 {
@@ -12,6 +13,16 @@ class GuidedAssessment extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (self $run): void {
+            $bank = $run->bank()->first();
+            $system = $run->system()->first();
+            if (! $bank || ! $system || $bank->standard_id !== $system->standard_id || ($run->isDirty('guided_question_bank_id') && $bank->status !== 'published')) {
+                throw ValidationException::withMessages(['guided_question_bank_id' => 'Bank harus terbit dan sesuai standar sistem manajemen.']);
+            }
+            if ($run->high_risk_threshold < 1 || $run->high_risk_threshold > 25 || $run->critical_risk_threshold < $run->high_risk_threshold || $run->critical_risk_threshold > 25) {
+                throw ValidationException::withMessages(['risk' => 'Ambang risiko harus 1-25 dan ambang kritis tidak lebih rendah daripada ambang tinggi.']);
+            }
+        });
         static::created(function (self $assessment): void {
             if ($assessment->created_by) {
                 $assessment->memberships()->firstOrCreate(['user_id' => $assessment->created_by, 'role' => 'coordinator']);
