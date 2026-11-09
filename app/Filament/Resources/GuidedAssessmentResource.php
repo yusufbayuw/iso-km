@@ -6,6 +6,7 @@ use App\Filament\Resources\GuidedAssessmentResource\Pages;
 use App\Models\GuidedAssessment;
 use App\Models\GuidedExportTemplate;
 use App\Services\GuidedWorkbookExportService;
+use App\Services\GuidedQuestionBranchingService;
 use Illuminate\Support\Facades\Storage;
 use App\Models\GuidedQuestion;
 use App\Models\User;
@@ -67,6 +68,18 @@ class GuidedAssessmentResource extends Resource
             Tables\Columns\TextColumn::make('assignments_count')->label('Tugas')->counts('assignments'),
             Tables\Columns\TextColumn::make('locked_at')->label('Dikunci')->dateTime('d/m/Y H:i')->placeholder('-'),
         ])->actions([
+            Tables\Actions\Action::make('assign_roots')->label('Tugaskan Wawancara')->icon('heroicon-o-users')
+                ->visible(fn (GuidedAssessment $record) => self::canEdit($record))
+                ->form([
+                    Forms\Components\Select::make('user_id')->label('Responden')
+                        ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->searchable()->required(),
+                ])->action(function (GuidedAssessment $record, array $data): void {
+                    $count = app(GuidedQuestionBranchingService::class)->assignRoots(
+                        $record, User::findOrFail($data['user_id']), auth()->user()
+                    );
+                    Notification::make()->success()->title($count.' pertanyaan awal ditugaskan')->send();
+                }),
             Tables\Actions\Action::make('export')->label('Unduh XLSX')->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn (GuidedAssessment $record) => $record->isMember(auth()->user(), ['coordinator'])
                     && (auth()->user()?->can('guided.report.export') ?? false))
