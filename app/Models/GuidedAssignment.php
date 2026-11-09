@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GuidedAssignment extends Model
 {
+    protected $attributes = ['status' => 'assigned'];
     protected $fillable = ['guided_assessment_id', 'guided_question_id', 'user_id', 'status', 'due_at'];
     protected function casts(): array { return ['due_at' => 'date']; }
     public function assessment(): BelongsTo { return $this->belongsTo(GuidedAssessment::class, 'guided_assessment_id'); }
