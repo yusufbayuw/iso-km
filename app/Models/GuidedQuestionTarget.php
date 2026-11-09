@@ -7,6 +7,7 @@ use Illuminate\Validation\ValidationException;
 
 class GuidedQuestionTarget extends Model
 {
+    protected $attributes = ['is_required' => true, 'evidence_profile' => 'standard'];
     protected $fillable = ['guided_question_id', 'requirement_id', 'control_id', 'criterion', 'evidence_profile', 'evidence_hints', 'is_required'];
     protected function casts(): array { return ['evidence_hints' => 'array', 'is_required' => 'boolean']; }
 
