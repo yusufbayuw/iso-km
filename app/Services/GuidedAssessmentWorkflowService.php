@@ -64,6 +64,21 @@ class GuidedAssessmentWorkflowService
             if (! $run->isMember($actor, ['respondent']) || $assignment->question->guided_question_bank_id !== $run->guided_question_bank_id) {
                 throw ValidationException::withMessages(['question' => 'Penugasan tidak valid.']);
             }
+            $question = $assignment->question;
+            $value = $response['value'] ?? null;
+            if (! is_scalar($value) || trim((string) $value) === '') {
+                throw ValidationException::withMessages(['response' => 'Isi jawaban yang sesuai tipe pertanyaan.']);
+            }
+            if ($question->answer_type === 'single_choice' && ! in_array((string) $value, array_map('strval', $question->answer_options ?? []), true)) {
+                throw ValidationException::withMessages(['response' => 'Pilihan jawaban tidak tersedia dalam bank pertanyaan.']);
+            }
+            if ($question->answer_type === 'number' && ! is_numeric($value)) {
+                throw ValidationException::withMessages(['response' => 'Jawaban harus berupa angka.']);
+            }
+            if ($question->answer_type === 'date' && (! preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string) $value)
+                || ! \DateTimeImmutable::createFromFormat('!Y-m-d', (string) $value))) {
+                throw ValidationException::withMessages(['response' => 'Tanggal harus berformat YYYY-MM-DD.']);
+            }
             $contextKey = trim($contextKey);
             if ($contextKey === '' || mb_strlen($contextKey) > 150 || $response === []) {
                 throw ValidationException::withMessages(['response' => 'Jawaban dan konteks wajib diisi.']);
@@ -95,6 +110,7 @@ class GuidedAssessmentWorkflowService
             ]);
             if ($evidenceIds) { $answer->evidences()->sync($evidenceIds); }
             $assignment->update(['status' => 'submitted']);
+            app(GuidedQuestionBranchingService::class)->assignNext($assignment, $answer);
             return $answer;
         });
     }
