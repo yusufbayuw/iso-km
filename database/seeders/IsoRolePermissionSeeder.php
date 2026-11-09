@@ -12,7 +12,7 @@ class IsoRolePermissionSeeder extends Seeder
     {
         $workflowPermissions = [
             'portal.access',
-            'guided.bank.manage','guided.assessment.view','guided.assessment.manage','guided.answer.submit',
+            'guided.bank.manage','guided.template.manage','guided.assessment.view','guided.assessment.manage','guided.answer.submit',
             'guided.consolidate','guided.evidence.review','guided.assessment.review',
             'guided.risk.approve','guided.management.approve','guided.report.export',
             'document.submit_review','document.review','document.review_any','document.approve','document.approve_any','document.make_effective','document.obsolete','document.acknowledge',
