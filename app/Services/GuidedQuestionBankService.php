@@ -70,6 +70,50 @@ class GuidedQuestionBankService
         ];
     }
 
+    /**
+     * Generate editable starter prompts from the catalog already owned/licensed by
+     * the installing organization; no organization or ISO wording is embedded.
+     */
+    public function generateStarterQuestions(GuidedQuestionBank $bank, User $actor): int
+    {
+        if (! $actor->can('guided.bank.manage') || $bank->status !== 'draft') {
+            throw ValidationException::withMessages(['bank' => 'Hanya bank draft yang berwenang dapat diisi otomatis.']);
+        }
+        $options = ['Ya, dilaksanakan', 'Sebagian', 'Sedang direncanakan', 'Belum', 'Tidak mengetahui'];
+        $count = 0;
+        $requirements = Requirement::query()->where('standard_id', $bank->standard_id)
+            ->where('is_mandatory', true)->orderBy('sort_order')->get();
+        foreach ($requirements as $requirement) {
+            $question = $bank->questions()->firstOrCreate(['code' => 'REQ-'.$requirement->code], [
+                'prompt' => 'Bagaimana persyaratan '.$requirement->code.' - '.$requirement->title.' dipenuhi dalam lingkup organisasi?',
+                'help_text' => 'Ceritakan kondisi nyata, sebutkan cakupan dan lampirkan bukti yang tersedia.',
+                'answer_type' => 'single_choice', 'answer_options' => $options, 'is_required' => true,
+                'sort_order' => $requirement->sort_order,
+            ]);
+            $question->targets()->firstOrCreate(['requirement_id' => $requirement->id], [
+                'criterion' => 'Pelaksanaan persyaratan '.$requirement->code.' dan bukti pendukungnya',
+                'evidence_profile' => 'standard', 'is_required' => true,
+            ]);
+            $count++;
+        }
+        $controls = Control::query()->where('standard_id', $bank->standard_id)
+            ->where('is_group', false)->orderBy('sort_order')->get();
+        foreach ($controls as $control) {
+            $question = $bank->questions()->firstOrCreate(['code' => 'CTRL-'.$control->code], [
+                'prompt' => 'Bagaimana kontrol '.$control->code.' - '.$control->title.' diterapkan dalam lingkup organisasi?',
+                'help_text' => 'Jelaskan penerapan, pengecualian yang diajukan, aset atau proses yang terkait, serta bukti yang tersedia.',
+                'answer_type' => 'single_choice', 'answer_options' => $options, 'is_required' => true,
+                'sort_order' => $control->sort_order,
+            ]);
+            $question->targets()->firstOrCreate(['control_id' => $control->id], [
+                'criterion' => 'Penerapan kontrol '.$control->code.' terhadap ruang lingkup yang relevan',
+                'evidence_profile' => 'standard', 'is_required' => true,
+            ]);
+            $count++;
+        }
+        return $count;
+    }
+
     public function publish(GuidedQuestionBank $bank, User $actor): array
     {
         if (! $actor->can('guided.bank.manage')) {
