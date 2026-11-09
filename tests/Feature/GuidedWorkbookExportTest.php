@@ -74,6 +74,7 @@ class GuidedWorkbookExportTest extends TestCase
         ]);
         $output = app(GuidedWorkbookExportService::class)->export($run, $template, $user);
         $this->assertTrue(Storage::disk('local')->exists($output));
+        $this->assertDatabaseHas('guided_export_records', ['guided_assessment_id' => $run->id, 'is_final' => true]);
         $result = new ZipArchive();
         $this->assertTrue($result->open(Storage::disk('local')->path($output)) === true);
         $sheet = $result->getFromName('xl/worksheets/sheet1.xml');
