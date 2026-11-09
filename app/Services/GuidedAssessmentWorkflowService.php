@@ -216,9 +216,6 @@ class GuidedAssessmentWorkflowService
                 || $decision->approvals()->where('actor_id', $actor->id)->exists()) {
                 throw ValidationException::withMessages(['authorization' => 'Pemisahan tugas melarang persetujuan sendiri atau persetujuan ganda.']);
             }
-            if ($approved && $stage === 'assessor' && $decision->proposed_status === 'implemented' || false) {
-                // Deliberately no automatic compliance decision from a generic evidence verification.
-            }
             if ($approved && in_array($decision->proposed_status, ['conformant', 'implemented'], true)
                 && ! $decision->acceptances()->where('status', 'accepted')->exists()) {
                 throw ValidationException::withMessages(['evidence' => 'Penerapan penuh membutuhkan bukti yang diterima untuk kriteria ini.']);
