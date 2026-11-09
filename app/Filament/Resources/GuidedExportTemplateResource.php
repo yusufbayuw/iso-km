@@ -21,7 +21,7 @@ class GuidedExportTemplateResource extends Resource
     public static function canViewAny(): bool { return auth()->user()?->can('guided.template.manage') ?? false; }
     public static function canCreate(): bool { return self::canViewAny(); }
     public static function canEdit($record): bool { return self::canViewAny(); }
-    public static function canDelete($record): bool { return self::canViewAny(); }
+    public static function canDelete($record): bool { return self::canViewAny() && ! $record->exports()->exists(); }
 
     public static function form(Form $form): Form
     {
