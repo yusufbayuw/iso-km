@@ -38,9 +38,10 @@ class GuidedWorkbookExportTest extends TestCase
             'standard_id' => $standard->id, 'compliance_scope_id' => $scope->id, 'code' => 'TEST', 'name' => 'System',
         ]);
         $control = Control::create(['standard_id' => $standard->id, 'code' => 'A.8.13', 'title' => 'Backup']);
-        $bank = GuidedQuestionBank::create(['standard_id' => $standard->id, 'code' => 'TEST', 'name' => 'Test', 'status' => 'published']);
+        $bank = GuidedQuestionBank::create(['standard_id' => $standard->id, 'code' => 'TEST', 'name' => 'Test']);
         $question = GuidedQuestion::create(['guided_question_bank_id' => $bank->id, 'code' => 'Q-1', 'prompt' => 'Backup?']);
         $target = GuidedQuestionTarget::create(['guided_question_id' => $question->id, 'control_id' => $control->id, 'criterion' => 'Backup berjalan']);
+        $bank->update(['status' => 'published']);
         $run = GuidedAssessment::create([
             'management_system_id' => $system->id, 'guided_question_bank_id' => $bank->id,
             'name' => 'Example Run', 'created_by' => $user->id, 'status' => 'locked', 'locked_at' => now(),
