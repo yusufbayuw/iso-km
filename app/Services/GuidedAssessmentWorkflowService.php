@@ -184,7 +184,7 @@ class GuidedAssessmentWorkflowService
         $run = $decision->consolidation->assessment;
         $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.evidence.review', ['reviewer', 'assessor']);
-        if (! in_array($decision->status, ['submitted', 'evidence_review'], true) || trim($reason) === '') {
+        if (! in_array($decision->status, ['submitted', 'evidence_review'], true) || $decision->approvals()->exists() || trim($reason) === '') {
             throw ValidationException::withMessages(['decision' => 'Keputusan tidak menerima pemeriksaan evidence ini.']);
         }
         if ($evidence->management_system_id !== $run->management_system_id || $evidence->owner_id === $actor->id) {
@@ -232,7 +232,7 @@ class GuidedAssessmentWorkflowService
                 || $decision->approvals()->where('actor_id', $actor->id)->exists()) {
                 throw ValidationException::withMessages(['authorization' => 'Pemisahan tugas melarang persetujuan sendiri atau persetujuan ganda.']);
             }
-            if ($approved && in_array($decision->proposed_status, ['conformant', 'implemented'], true)
+            if ($approved && in_array($decision->proposed_status, ['conformant', 'implemented', 'partial', 'in_progress', 'planned'], true)
                 && ! $decision->acceptances()->where('status', 'accepted')->exists()) {
                 throw ValidationException::withMessages(['evidence' => 'Penerapan penuh membutuhkan bukti yang diterima untuk kriteria ini.']);
             }
@@ -273,6 +273,13 @@ class GuidedAssessmentWorkflowService
             $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
             if ($decision->status !== 'approved' || ! $decision->consolidation->is_current) {
                 throw ValidationException::withMessages(['decision' => 'Hanya keputusan current yang disetujui dapat dipublikasikan.']);
+            }
+            if (in_array($decision->proposed_status, ['conformant', 'implemented', 'partial', 'in_progress', 'planned'], true)
+                && ! $decision->acceptances()->where('status', 'accepted')->whereHas('evidence', fn ($q) =>
+                    $q->where('status', 'active')->where('verification_status', 'verified')
+                        ->where(fn ($date) => $date->whereNull('expires_at')->orWhereDate('expires_at', '>=', today()))
+                )->exists()) {
+                throw ValidationException::withMessages(['evidence' => 'Bukti yang telah diterima harus tetap valid sebelum publikasi.']);
             }
             if ($decision->synced_at) { return; }
             $target = $decision->target;
@@ -318,6 +325,15 @@ class GuidedAssessmentWorkflowService
             $completed = (clone $decisions)->where('status', 'approved')->whereNotNull('synced_at')
                 ->whereNotIn('proposed_status', ['not_assessed'])
                 ->pluck('guided_question_target_id')->unique();
+            $missingFreshEvidence = (clone $decisions)
+                ->whereIn('proposed_status', ['conformant', 'implemented', 'partial', 'in_progress', 'planned'])
+                ->whereDoesntHave('acceptances', fn ($q) => $q->where('status', 'accepted')
+                    ->whereHas('evidence', fn ($e) => $e->where('status', 'active')->where('verification_status', 'verified')
+                        ->where(fn ($d) => $d->whereNull('expires_at')->orWhereDate('expires_at', '>=', today()))))
+                ->exists();
+            if ($missingFreshEvidence) {
+                throw ValidationException::withMessages(['evidence' => 'Ada keputusan dengan bukti tidak lagi valid untuk finalisasi.']);
+            }
             if ($expectedTargets->isEmpty() || $expectedTargets->diff($completed)->isNotEmpty()
                 || (clone $decisions)->where(function ($q) { $q->where('status', '!=', 'approved')->orWhereNull('synced_at'); })->exists()) {
                 throw ValidationException::withMessages(['assessment' => 'Semua kriteria wajib memerlukan keputusan aktif yang telah disetujui dan dipublikasikan.']);
