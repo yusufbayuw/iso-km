@@ -4,6 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GuidedAssessmentResource\Pages;
 use App\Models\GuidedAssessment;
+use App\Models\GuidedExportTemplate;
+use App\Services\GuidedWorkbookExportService;
+use Illuminate\Support\Facades\Storage;
 use App\Models\GuidedQuestion;
 use App\Models\User;
 use App\Services\GuidedAssessmentWorkflowService;
@@ -64,6 +67,22 @@ class GuidedAssessmentResource extends Resource
             Tables\Columns\TextColumn::make('assignments_count')->label('Tugas')->counts('assignments'),
             Tables\Columns\TextColumn::make('locked_at')->label('Dikunci')->dateTime('d/m/Y H:i')->placeholder('-'),
         ])->actions([
+            Tables\Actions\Action::make('export')->label('Unduh XLSX')->icon('heroicon-o-arrow-down-tray')
+                ->visible(fn (GuidedAssessment $record) => $record->isMember(auth()->user(), ['coordinator'])
+                    && (auth()->user()?->can('guided.report.export') ?? false))
+                ->form([
+                    Forms\Components\Select::make('template_id')->label('Template Ekspor')->required()->searchable()
+                        ->options(fn (GuidedAssessment $record) => GuidedExportTemplate::query()
+                            ->where('is_active', true)
+                            ->where(fn ($q) => $q->whereNull('management_system_id')->orWhere('management_system_id', $record->management_system_id))
+                            ->pluck('name', 'id')->all()),
+                ])->action(function (GuidedAssessment $record, array $data) {
+                    $path = app(GuidedWorkbookExportService::class)->export(
+                        $record, GuidedExportTemplate::findOrFail($data['template_id']), auth()->user(),
+                        $record->status === 'locked'
+                    );
+                    return response()->download(Storage::disk('local')->path($path), 'Assessment-'.$record->id.($record->status === 'locked' ? '-FINAL' : '-DRAFT').'.xlsx');
+                }),
             Tables\Actions\Action::make('assign')->label('Tugaskan')->icon('heroicon-o-user-plus')
                 ->visible(fn (GuidedAssessment $record) => self::canEdit($record))
                 ->form([
