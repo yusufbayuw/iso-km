@@ -8,6 +8,7 @@ use App\Filament\Resources\GuidedAssignmentResource;
 use App\Filament\Resources\GuidedConsolidationResource;
 use App\Filament\Resources\GuidedDecisionResource;
 use App\Filament\Resources\GuidedExportTemplateResource;
+use App\Filament\Resources\GuidedExportRecordResource;
 use App\Filament\Resources\GuidedQuestionBankResource;
 use App\Filament\Resources\GuidedQuestionResource;
 use App\Models\User;
@@ -36,6 +37,7 @@ class GuidedFilamentSmokeTest extends TestCase
             GuidedAssessmentResource::class, GuidedAssignmentResource::class,
             GuidedAnswerResource::class, GuidedConsolidationResource::class,
             GuidedDecisionResource::class, GuidedExportTemplateResource::class,
+            GuidedExportRecordResource::class,
         ] as $resource) {
             $this->get($resource::getUrl('index'))->assertOk();
         }
