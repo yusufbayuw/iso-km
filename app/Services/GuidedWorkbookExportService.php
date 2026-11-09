@@ -140,7 +140,8 @@ class GuidedWorkbookExportService
         $targets = [];
         foreach ($rel->getElementsByTagNameNS(self::PACKAGE_REL_NS, 'Relationship') as $relationship) {
             $target = $relationship->getAttribute('Target');
-            if (str_starts_with($target, '/') || str_contains($target, '..')) {
+            $target = ltrim($target, '/');
+            if (str_contains($target, '..') || str_contains($target, chr(92))) {
                 continue;
             }
             $targets[$relationship->getAttribute('Id')] = str_starts_with($target, 'xl/') ? $target : 'xl/'.$target;
