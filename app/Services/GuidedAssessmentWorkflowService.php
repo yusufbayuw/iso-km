@@ -252,7 +252,10 @@ class GuidedAssessmentWorkflowService
     {
         $stages = ['assessor'];
         if ($decision->risk_score >= $run->high_risk_threshold) { $stages[] = 'risk_owner'; }
-        if ($decision->risk_score >= $run->critical_risk_threshold) { $stages[] = 'management'; }
+        if ($decision->risk_score >= $run->critical_risk_threshold
+            || ($decision->proposed_status === 'not_applicable' && $decision->target->evidence_profile === 'critical')) {
+            $stages[] = 'management';
+        }
         $approved = $decision->approvals()->where('outcome', 'approved')->pluck('stage')->all();
         foreach ($stages as $stage) {
             if (! in_array($stage, $approved, true)) { return $stage; }
@@ -313,6 +316,7 @@ class GuidedAssessmentWorkflowService
             $decisions = GuidedDecision::query()->whereHas('consolidation',
                 fn ($q) => $q->where('guided_assessment_id', $run->id)->where('is_current', true));
             $completed = (clone $decisions)->where('status', 'approved')->whereNotNull('synced_at')
+                ->whereNotIn('proposed_status', ['not_assessed'])
                 ->pluck('guided_question_target_id')->unique();
             if ($expectedTargets->isEmpty() || $expectedTargets->diff($completed)->isNotEmpty()
                 || (clone $decisions)->where(function ($q) { $q->where('status', '!=', 'approved')->orWhereNull('synced_at'); })->exists()) {
