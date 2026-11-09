@@ -30,11 +30,31 @@ class GuidedQuestionBankService
                 $invalidQuestions[] = $question->code;
             }
             foreach ($question->branch_rules ?? [] as $rule) {
-                if (! is_array($rule) || ! isset($rule['next_code']) || ! in_array($rule['next_code'], $codes, true)) {
+                if (! is_array($rule) || ! isset($rule['next_code']) || ! in_array($rule['next_code'], $codes, true)
+                    || ! isset($rule['when']) || ($question->answer_type === 'single_choice'
+                        && ! in_array((string) $rule['when'], array_map('strval', $options), true))) {
                     $brokenBranches[] = $question->code;
                 }
             }
         }
+        $graph = $questions->mapWithKeys(fn ($q) => [$q->code => collect($q->branch_rules ?? [])
+            ->pluck('next_code')->filter()->all()])->all();
+        $visiting = [];
+        $visited = [];
+        $checkCycle = function (string $code) use (&$checkCycle, &$visiting, &$visited, &$brokenBranches, $graph): void {
+            if (isset($visiting[$code])) {
+                $brokenBranches[] = $code;
+                return;
+            }
+            if (isset($visited[$code])) { return; }
+            $visiting[$code] = true;
+            foreach ($graph[$code] ?? [] as $next) {
+                if (isset($graph[$next])) { $checkCycle($next); }
+            }
+            unset($visiting[$code]);
+            $visited[$code] = true;
+        };
+        foreach (array_keys($graph) as $code) { $checkCycle($code); }
 
         return [
             'question_count' => $questions->count(),
