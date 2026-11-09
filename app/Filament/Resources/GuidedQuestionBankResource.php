@@ -46,6 +46,12 @@ class GuidedQuestionBankResource extends Resource
             Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
             Tables\Columns\TextColumn::make('questions_count')->label('Pertanyaan')->counts('questions'),
         ])->actions([
+            Tables\Actions\Action::make('generate')->label('Buat Pertanyaan Awal')->icon('heroicon-o-sparkles')
+                ->requiresConfirmation()->visible(fn (GuidedQuestionBank $record) => $record->status === 'draft')
+                ->action(function (GuidedQuestionBank $record): void {
+                    $count = app(GuidedQuestionBankService::class)->generateStarterQuestions($record, auth()->user());
+                    Notification::make()->success()->title($count.' pertanyaan dari master standar tersedia untuk disunting')->send();
+                }),
             Tables\Actions\Action::make('coverage')->label('Coverage')->icon('heroicon-o-chart-bar')
                 ->modalSubmitAction(false)->modalCancelActionLabel('Tutup')
                 ->modalContent(fn (GuidedQuestionBank $record) => view('filament.guided.coverage', ['coverage' => app(GuidedQuestionBankService::class)->coverage($record)])),
