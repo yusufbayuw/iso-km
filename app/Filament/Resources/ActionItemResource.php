@@ -70,6 +70,9 @@ class ActionItemResource extends Resource
     {
         return [
             'manual' => 'Manual',
+            'guided_interview' => 'Wawancara ISO',
+            'guided_evidence_review' => 'Review Bukti Asesmen',
+            'guided_review' => 'Persetujuan Asesmen',
             'evidence_collection' => 'Evidence',
             'document_review' => 'Review Dokumen',
             'document_acknowledgement' => 'Acknowledgement Dokumen',
