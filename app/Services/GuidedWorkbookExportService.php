@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GuidedAssessment;
+use App\Models\GuidedExportRecord;
 use App\Models\GuidedDecision;
 use App\Models\GuidedExportTemplate;
 use App\Models\User;
@@ -49,6 +50,16 @@ class GuidedWorkbookExportService
         }
         try {
             $this->fill($dest, $run, $template, $final);
+            GuidedExportRecord::query()->create([
+                'guided_assessment_id' => $run->id,
+                'guided_export_template_id' => $template->id,
+                'generated_by' => $actor->id,
+                'is_final' => $final,
+                'mapping_snapshot' => $template->mappings,
+                'template_sha256' => hash_file('sha256', $src),
+                'output_sha256' => hash_file('sha256', $dest),
+                'file_path' => $relative,
+            ]);
             return $relative;
         } catch (\Throwable $exception) {
             @unlink($dest);
