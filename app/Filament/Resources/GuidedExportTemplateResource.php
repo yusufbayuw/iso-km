@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GuidedExportTemplateResource\Pages;
 use App\Models\GuidedExportTemplate;
+use App\Services\GuidedWorkbookMappingService;
+use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -52,6 +54,7 @@ class GuidedExportTemplateResource extends Resource
                     'status' => 'Status untuk Excel', 'raw_status' => 'Status Teknis',
                     'rationale' => 'Alasan Penilaian', 'summary' => 'Hasil Konsolidasi',
                     'risk_score' => 'Skor Risiko', 'evidence_refs' => 'Kode Evidence',
+                    'notes_and_evidence' => 'Catatan dan Bukti', 'na_justification' => 'Alasan Tidak Berlaku',
                     'approved_at' => 'Tanggal Disetujui', 'applicable' => 'Applicability',
                 ])->required(),
                 Forms\Components\Toggle::make('required')->label('Wajib tersedia')->default(true),
@@ -67,7 +70,23 @@ class GuidedExportTemplateResource extends Resource
             Tables\Columns\TextColumn::make('system.name')->label('Sistem')->placeholder('Global'),
             Tables\Columns\TextColumn::make('is_active')->label('Aktif')->badge(),
             Tables\Columns\TextColumn::make('updated_at')->label('Diperbarui')->dateTime('d/m/Y H:i'),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([
+            Tables\Actions\Action::make('detect_mapping')->label('Deteksi Kolom')->icon('heroicon-o-magnifying-glass')
+                ->requiresConfirmation()
+                ->visible(fn (GuidedExportTemplate $record) => $record->is_active && $record->management_system_id !== null)
+                ->modalDescription('Sistem membaca kode persyaratan/kontrol dan kolom status/evidence. Pemetaan yang ada akan diganti. Periksa hasil sebelum ekspor final.')
+                ->action(function (GuidedExportTemplate $record): void {
+                    $result = app(GuidedWorkbookMappingService::class)->suggest($record);
+                    if (! count($result['mappings'])) {
+                        Notification::make()->warning()->title('Tidak ada kolom yang dapat dipetakan')->send();
+                        return;
+                    }
+                    $record->update(['mappings' => $result['mappings']]);
+                    Notification::make()->success()->title($result['recognized_targets'].' item terpetakan')
+                        ->body(count($result['warnings']).' catatan. Periksa pemetaan dan katalog standar sebelum ekspor final.')->send();
+                }),
+            Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make(),
+        ]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageGuidedExportTemplates::route('/')]; }
