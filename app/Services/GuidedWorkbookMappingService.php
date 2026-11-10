@@ -26,9 +26,9 @@ class GuidedWorkbookMappingService
         if (! $template->management_system_id) {
             throw ValidationException::withMessages(['template' => 'Pilih sistem manajemen sebagai konteks deteksi pemetaan.']);
         }
-        $path = Storage::disk('local')->path($template->file_path);
+        $path = app(GuidedWorkbookTemplateFileService::class)->path($template->file_path);
         $zip = new ZipArchive();
-        if (! is_file($path) || $zip->open($path) !== true) {
+        if ($zip->open($path) !== true) {
             throw ValidationException::withMessages(['template' => 'Template XLSX tidak dapat dibuka.']);
         }
         try {
