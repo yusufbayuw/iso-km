@@ -98,6 +98,58 @@ and its organization labels, worksheet names and fixed row counts are not
 hard-coded into ISO-KM. Complete coverage must be configured against a full
 standard catalog and an appropriate bank, not inferred from an example sheet.
 
+## Structured branching and audit-safe corrections
+
+- Root questions own the required requirement/control assessments.
+  Conditional follow-up questions only gather clarifying detail and cannot
+  silently become the sole source of a mandatory criterion.
+- The respondent can provide multiple answers, including separate answers
+  for individual systems/assets; the latest answer **per context** controls
+  reachability of follow-up questions.
+- Automatic follow-ups retain their original submitted answers for audit
+  when a later parent answer deactivates the branch. Inactive assignments
+  have status `skipped`, cannot accept fresh answers, and do not block locking.
+  Reactivation requires fresh answers before downstream branches may reactivate.
+- Coordinator-assigned questions are distinguished from automatic follow-ups;
+  the engine cannot silently cancel a manual assignment.
+- After a new answer, the earlier consolidation is no longer current and
+  cannot be used as a new publication without renewed review.
+
+## White-label GAP template: context and risk protection
+
+A real example workbook may already contain organization names, invented
+risk scenarios, asset titles and activity descriptions. Its contents are
+**not** standard master data and are never imported as defaults.
+
+Guided Assessment now provides the `Inventaris Konteks` menu for per-run,
+coordinator-owned information assets and activities, while the existing
+`Risk Register` remains the source for risks and related controls.
+
+A template mapping detector looks for general column headings and can map:
+
+- Requirement and control IDs to implementation status, notes/evidence and
+  N/A justifications.
+- Organization, assessed unit/scope, assessor names and assessment date.
+  Configure `ISO_KM_ORGANIZATION_NAME` for the deployment's organization
+  identity and optionally `ISO_KM_ASSESSOR_ROLE`.
+- Information asset and activity rows to the inventory associated with
+  that specific assessment run.
+- Risk rows to risks in the same management system, including actual
+  likelihood, impact, category, description, linked controls and treatment.
+
+A **final** GAP export refuses mismatched prefilled organization names,
+unmapped recognized context input cells, and more risk/inventory records
+than the template has rows. Records absent from the organization are
+exported as blank input cells rather than sample data. If a risk has more
+linked controls than the available template columns, export is blocked
+rather than truncating those links.
+
+This cannot make an arbitrary, organization-specific source workbook
+neutral automatically: administrators must review free-text instructions,
+fixed captions and any unrecognized areas before using it for another
+organization. The original example workbook is **only a compatibility
+reference**, not a canonical dataset or a supported bundled template.
+
 ## Known limitations / unfinished acceptance criteria
 
 - Standards are licensed material: the repository seed currently initializes
@@ -125,13 +177,19 @@ standard catalog and an appropriate bank, not inferred from an example sheet.
   active consolidations without discarding the raw evidence.
 - Risk approval strength is at least the score of linked open Risk Register
   entries; decisions must be re-reviewed if their linked risk subsequently rises.
-- Asset registers, questionnaire-to-risk generation, recurring assessments,
-  advanced conflict-resolution UX, per-role dashboard polish, and full
-  multi-tenant infrastructure need follow-up work.
+- Assets and activities now have a per-assessment register, but automatic
+  extraction from interviews, risk discovery, recurring assessments, advanced
+  conflict-resolution UX, per-role dashboard polish and full multi-tenant
+  infrastructure need follow-up work.
 - Role membership and evidence security need penetration/UAT testing in the
   actual hosting environment. CI passing is necessary, not sufficient.
-- The sample workbook may use Excel extensions that require manual Excel-based
-  acceptance testing beyond the synthetic package preservation test.
+- The example XLSX was inspected read-only: 30 clause items, 93 Annex A
+  controls, 18 prefilled risk scenarios, 24 prefilled asset descriptions,
+  12 prefilled activities, 3 chart XML parts and Excel extended validations.
+  Its organization-specific values are not copied into the application.
+  CI tests structural export with generic workbooks, but Microsoft Excel
+  desktop UAT of real complex formulas, charts and validation extensions
+  is still required.
 
 ## Release guardrails
 
