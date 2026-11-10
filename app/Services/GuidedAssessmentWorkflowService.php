@@ -233,8 +233,11 @@ class GuidedAssessmentWorkflowService
 
     public function acceptEvidence(GuidedDecision $decision, Evidence $evidence, User $actor, bool $accepted, string $reason): GuidedEvidenceAcceptance
     {
-        $run = $decision->consolidation->assessment;
-        $this->assertMutable($run);
+        return DB::transaction(function () use ($decision, $evidence, $actor, $accepted, $reason): GuidedEvidenceAcceptance {
+            $runId = $decision->consolidation->guided_assessment_id;
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
+            $decision = GuidedDecision::query()->lockForUpdate()->findOrFail($decision->id);
+            $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.evidence.review', ['reviewer', 'assessor']);
         if (! in_array($decision->status, ['submitted', 'evidence_review'], true) || $decision->approvals()->exists() || trim($reason) === '') {
             throw ValidationException::withMessages(['decision' => 'Keputusan tidak menerima pemeriksaan evidence ini.']);
@@ -250,11 +253,12 @@ class GuidedAssessmentWorkflowService
         if (! $sourceEvidenceIds->contains($evidence->id)) {
             throw ValidationException::withMessages(['evidence' => 'Evidence belum dikaitkan pada jawaban sumber.']);
         }
-        return GuidedEvidenceAcceptance::query()->updateOrCreate(
-            ['guided_decision_id' => $decision->id, 'evidence_id' => $evidence->id],
-            ['status' => $accepted ? 'accepted' : 'rejected', 'rationale' => $reason,
-             'reviewed_by' => $actor->id, 'reviewed_at' => now()],
-        );
+            return GuidedEvidenceAcceptance::query()->updateOrCreate(
+                ['guided_decision_id' => $decision->id, 'evidence_id' => $evidence->id],
+                ['status' => $accepted ? 'accepted' : 'rejected', 'rationale' => $reason,
+                 'reviewed_by' => $actor->id, 'reviewed_at' => now()],
+            );
+        });
     }
 
     /** Approval is always performed by an assigned reviewer, never by a submitting respondent. */
