@@ -15,6 +15,16 @@ class GuidedAssessment extends Model
     protected static function booted(): void
     {
         static::saving(function (self $run): void {
+            if ($run->exists && ($run->isDirty('management_system_id') || $run->isDirty('guided_question_bank_id') || $run->isDirty('created_by'))) {
+                throw ValidationException::withMessages(['assessment' => 'Identitas, bank dan pemilik periode tidak dapat diganti setelah dibuat.']);
+            }
+            if ($run->exists && $run->getOriginal('locked_at') && $run->isDirty()) {
+                throw ValidationException::withMessages(['assessment' => 'Asesmen final yang terkunci tidak boleh diubah.']);
+            }
+            if ($run->exists && ($run->isDirty('high_risk_threshold') || $run->isDirty('critical_risk_threshold'))
+                && ($run->assignments()->exists() || $run->consolidations()->exists())) {
+                throw ValidationException::withMessages(['risk' => 'Ambang risiko tidak boleh diubah setelah wawancara dimulai.']);
+            }
             $bank = $run->bank()->first();
             $system = $run->system()->first();
             if (! $bank || ! $system || $bank->standard_id !== $system->standard_id || ($run->isDirty('guided_question_bank_id') && $bank->status !== 'published')) {
