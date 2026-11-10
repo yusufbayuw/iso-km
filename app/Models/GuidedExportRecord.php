@@ -3,11 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GuidedExportRecord extends Model
 {
     public $timestamps = true;
+    protected static function booted(): void
+    {
+        static::updating(fn () => throw ValidationException::withMessages(['export' => 'Arsip ekspor immutable.']));
+        static::deleting(fn () => throw ValidationException::withMessages(['export' => 'Arsip ekspor immutable.']));
+    }
+
     protected $fillable = [
         'guided_assessment_id', 'guided_export_template_id', 'generated_by',
         'is_final', 'mapping_snapshot', 'template_sha256', 'output_sha256', 'file_path',
