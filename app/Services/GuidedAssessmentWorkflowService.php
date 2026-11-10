@@ -242,6 +242,11 @@ class GuidedAssessmentWorkflowService
             $decision = GuidedDecision::query()->lockForUpdate()->findOrFail($decision->id);
             $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.evidence.review', ['reviewer', 'assessor']);
+        if (! $actor->can('view_evidence')
+            || $decision->consolidation->prepared_by === $actor->id
+            || $decision->consolidation->sources()->where('respondent_id', $actor->id)->exists()) {
+            throw ValidationException::withMessages(['authorization' => 'Reviewer harus memiliki hak baca evidence dan tidak boleh meninjau jawaban sendiri.']);
+        }
         if (! in_array($decision->status, ['submitted', 'evidence_review'], true) || $decision->approvals()->exists() || trim($reason) === '') {
             throw ValidationException::withMessages(['decision' => 'Keputusan tidak menerima pemeriksaan evidence ini.']);
         }
