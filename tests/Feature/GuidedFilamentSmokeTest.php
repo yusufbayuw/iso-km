@@ -21,6 +21,12 @@ class GuidedFilamentSmokeTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_guided_assessment_navigation_pages_render_for_authorized_coordinator(): void
     {
         $user = User::create(['name' => 'Coordinator', 'email' => 'ui@example.test', 'password' => 'password']);
