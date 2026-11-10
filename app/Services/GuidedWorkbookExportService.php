@@ -46,6 +46,9 @@ class GuidedWorkbookExportService
             $this->assertCompleteGapMapping($run, $template->mappings);
         }
         $src = app(GuidedWorkbookTemplateFileService::class)->path($template->file_path);
+        if ($final && $template->report_type === 'gap_analysis') {
+            $this->assertNoInheritedOrganizationData($run, $template);
+        }
         $relative = 'iso/exports/assessment-'.$run->id.'-'.($final ? 'FINAL' : 'DRAFT').'-'.Str::random(12).'.xlsx';
         $dest = Storage::disk('local')->path($relative);
         File::ensureDirectoryExists(dirname($dest));
@@ -160,6 +163,65 @@ class GuidedWorkbookExportService
         }
         if ($missing) {
             throw ValidationException::withMessages(['mappings' => 'Pemetaan GAP Analysis belum mencakup status dan bukti/catatan untuk: '.implode(', ', array_slice(array_unique($missing), 0, 12))]);
+        }
+    }
+
+    /**
+     * Detect organization-specific source data before a final white-label export.
+     * All recognized risk/inventory cells must be mapped so leftover example
+     * values are explicitly replaced with real records or cleared.
+     */
+    private function assertNoInheritedOrganizationData(GuidedAssessment $run, GuidedExportTemplate $template): void
+    {
+        $detected = app(GuidedWorkbookMappingService::class)->suggest(
+            $template, $run->system->standard_id
+        );
+        $fromTemplate = trim((string) ($detected['prefilled_organization'] ?? ''));
+        $organization = trim((string) config('iso-km.organization_name', ''));
+        if ($fromTemplate !== '' && ($organization === ''
+            || mb_strtolower($fromTemplate) !== mb_strtolower($organization))) {
+            throw ValidationException::withMessages(['template' =>
+                'Template masih berisi nama organisasi lain. Kosongkan/bersihkan data contoh sebelum ekspor final.']);
+        }
+
+        $existing = collect($template->mappings)->map(fn ($mapping) =>
+            implode('|', [
+                $mapping['sheet'] ?? '', strtoupper((string) ($mapping['cell'] ?? '')),
+                $mapping['source'] ?? '', $mapping['code'] ?? '', $mapping['field'] ?? '',
+            ]))->flip();
+
+        $missing = [];
+        foreach ($detected['mappings'] as $mapping) {
+            if (! in_array($mapping['source'], ['assessment', 'risk_index', 'asset_index', 'activity_index'], true)) {
+                continue;
+            }
+            $key = implode('|', [$mapping['sheet'], strtoupper($mapping['cell']),
+                $mapping['source'], $mapping['code'] ?? '', $mapping['field']]);
+            if (! $existing->has($key)) {
+                $missing[] = $mapping['sheet'].'!'.$mapping['cell'];
+            }
+            if ($mapping['source'] === 'assessment' && $mapping['field'] === 'organization_name'
+                && $organization === '') {
+                throw ValidationException::withMessages(['template' =>
+                    'Isi ISO_KM_ORGANIZATION_NAME untuk laporan organisasi, jangan memakai identitas template contoh.']);
+            }
+        }
+        if ($missing) {
+            throw ValidationException::withMessages(['mappings' =>
+                'Ada sel profil/risiko/inventaris contoh yang belum dipetakan: '.implode(', ', array_slice($missing, 0, 15))]);
+        }
+        $capacities = $detected['context_capacities'] ?? [];
+        $counts = [
+            'risk_index' => Risk::query()->where('management_system_id', $run->management_system_id)->count(),
+            'asset_index' => $run->scopeItems()->where('kind', 'asset')->count(),
+            'activity_index' => $run->scopeItems()->where('kind', 'activity')->count(),
+        ];
+        foreach ($counts as $type => $count) {
+            $capacity = (int) ($capacities[$type] ?? 0);
+            if ($count > $capacity) {
+                throw ValidationException::withMessages(['template' =>
+                    'Jumlah data '.$type.' ('.$count.') melebihi kapasitas template ('.$capacity.'). Perlu template lebih luas sebelum ekspor.']);
+            }
         }
     }
 
