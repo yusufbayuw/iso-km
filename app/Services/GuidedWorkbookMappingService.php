@@ -104,7 +104,12 @@ class GuidedWorkbookMappingService
                     }
                 }
             }
+            $context = app(GuidedWorkbookContextMappingService::class)->suggest($zip, $strings, $parts);
+            $mappings = array_merge($mappings, $context['mappings']);
+            $warnings = array_merge($warnings, $context['warnings']);
+
             return ['mappings' => $mappings, 'recognized_targets' => count($identities),
+                'context_capacities' => $context['capacities'],
                 'warnings' => array_slice($warnings, 0, 50)];
         } finally {
             $zip->close();
