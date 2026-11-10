@@ -82,8 +82,17 @@ class IsoRolePermissionSeeder extends Seeder
             'external_auditor' => ['portal.access','external_auditor_workspace.view','external_audit_pack.export'],
         ];
 
+        // Existing role permissions may have been customized for production.
+        // Do not erase those changes when adding the new Guided Assessment feature.
+        $guidedPermissions = array_filter($workflowPermissions, fn (string $p) => str_starts_with($p, 'guided.'));
         foreach ($templates as $roleName => $rolePermissions) {
-            Role::findOrCreate($roleName, 'web')->syncPermissions(array_values(array_unique($rolePermissions)));
+            $role = Role::findOrCreate($roleName, 'web');
+            $grants = array_values(array_unique($rolePermissions));
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($grants);
+            } else {
+                $role->givePermissionTo(array_values(array_intersect($grants, $guidedPermissions)));
+            }
         }
 
         Role::findOrCreate('super_admin', 'web')->givePermissionTo($allPermissions);
