@@ -13,6 +13,9 @@ use App\Filament\Resources\GuidedQuestionBankResource;
 use App\Filament\Resources\GuidedScopeItemResource;
 use App\Filament\Resources\GuidedQuestionResource;
 use App\Models\User;
+use App\Models\Standard;
+use App\Models\ComplianceScope;
+use App\Models\ManagementSystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -38,6 +41,12 @@ class GuidedFilamentSmokeTest extends TestCase
         ];
         foreach ($permissions as $name) { Permission::findOrCreate($name, 'web'); }
         $user->givePermissionTo($permissions);
+        $standard = Standard::create(['code' => 'DEMO', 'name' => 'Generic standard', 'edition' => '1']);
+        $scope = ComplianceScope::create(['code' => 'OWN', 'name' => 'Owned scope', 'owner_id' => $user->id]);
+        ManagementSystem::create([
+            'standard_id' => $standard->id, 'compliance_scope_id' => $scope->id,
+            'code' => 'OWN', 'name' => 'Owned system',
+        ]);
         $this->actingAs($user);
         foreach ([
             GuidedQuestionBankResource::class, GuidedQuestionResource::class,
