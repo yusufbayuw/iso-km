@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\GuidedAssessmentResource;
 use App\Filament\Resources\GuidedExportTemplateResource;
+use App\Filament\Resources\ActionItemResource;
+use App\Models\ActionItem;
+use App\Services\ActionItemSyncService;
 use App\Models\ComplianceScope;
 use App\Models\GuidedAssessment;
 use App\Models\GuidedExportTemplate;
@@ -85,6 +88,24 @@ class GuidedFeatureScopeTest extends TestCase
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('guided_assessment', $exception->errors());
         }
+    }
+
+    public function test_disabling_guided_assessment_does_not_complete_or_expose_existing_work_items(): void
+    {
+        config()->set('iso-km.guided_assessment_enabled', false);
+        $owner = $this->user('Worker', ['portal.access', 'action_item.view_all']);
+        $task = ActionItem::create([
+            'owner_id' => $owner->id,
+            'action_key' => 'auto:guided_interview:historical:42',
+            'category' => 'guided_interview',
+            'title' => 'Unfinished interview',
+            'is_generated' => true,
+            'status' => 'open',
+        ]);
+        app(ActionItemSyncService::class)->sync();
+        $this->assertSame('open', $task->refresh()->status);
+        $this->actingAs($owner);
+        $this->assertFalse(ActionItemResource::getEloquentQuery()->whereKey($task->id)->exists());
     }
 
     public function test_template_scope_and_assessment_creation_are_checked_server_side(): void
