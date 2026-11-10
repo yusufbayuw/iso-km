@@ -10,6 +10,7 @@ use App\Filament\Resources\GuidedDecisionResource;
 use App\Filament\Resources\GuidedExportTemplateResource;
 use App\Filament\Resources\GuidedExportRecordResource;
 use App\Filament\Resources\GuidedQuestionBankResource;
+use App\Filament\Resources\GuidedScopeItemResource;
 use App\Filament\Resources\GuidedQuestionResource;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,7 +37,8 @@ class GuidedFilamentSmokeTest extends TestCase
             GuidedQuestionBankResource::class, GuidedQuestionResource::class,
             GuidedAssessmentResource::class, GuidedAssignmentResource::class,
             GuidedAnswerResource::class, GuidedConsolidationResource::class,
-            GuidedDecisionResource::class, GuidedExportTemplateResource::class,
+            GuidedDecisionResource::class, GuidedScopeItemResource::class,
+            GuidedExportTemplateResource::class,
             GuidedExportRecordResource::class,
         ] as $resource) {
             $this->get($resource::getUrl('index'))->assertOk();
