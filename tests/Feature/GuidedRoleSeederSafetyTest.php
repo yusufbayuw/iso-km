@@ -12,6 +12,12 @@ class GuidedRoleSeederSafetyTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_new_guided_permissions_do_not_reset_existing_custom_role_grants(): void
     {
         Permission::findOrCreate('custom.private.audit', 'web');
