@@ -38,6 +38,7 @@ class GuidedAssessmentWorkflowService
 
     public function assign(GuidedAssessment $run, GuidedQuestion $question, User $respondent, User $actor, ?string $dueAt = null): GuidedAssignment
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
         if ($question->guided_question_bank_id !== $run->guided_question_bank_id) {
@@ -65,6 +66,7 @@ class GuidedAssessmentWorkflowService
     /** Responses are append-only; a correction points to an earlier response. */
     public function submitAnswer(GuidedAssignment $assignment, User $actor, array $response, string $contextKey = 'general', ?string $notes = null, array $evidenceIds = [], ?int $supersedesId = null): GuidedAnswer
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         return DB::transaction(function () use ($assignment, $actor, $response, $contextKey, $notes, $evidenceIds, $supersedesId): GuidedAnswer {
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($assignment->guided_assessment_id);
             $assignment = GuidedAssignment::query()->lockForUpdate()->findOrFail($assignment->id);
@@ -132,6 +134,7 @@ class GuidedAssessmentWorkflowService
     /** Preserves all source answers, including rejected or superseded ones. */
     public function consolidate(GuidedAssessment $run, GuidedQuestion $question, User $actor, array $sourceAnswerIds, string $summary, string $method = 'summary', string $contextKey = 'general', ?string $reason = null): GuidedConsolidation
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.consolidate', ['coordinator', 'consolidator']);
         if ($question->guided_question_bank_id !== $run->guided_question_bank_id || ! in_array($method, ['select', 'merge', 'summary'], true)) {
@@ -175,6 +178,7 @@ class GuidedAssessmentWorkflowService
 
     public function propose(GuidedConsolidation $consolidation, GuidedQuestionTarget $target, User $actor, string $status, int $riskScore, string $rationale, ?int $riskOwnerId = null, ?bool $applicable = null): GuidedDecision
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         return DB::transaction(function () use ($consolidation, $target, $actor, $status, $riskScore, $rationale, $riskOwnerId, $applicable): GuidedDecision {
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($consolidation->guided_assessment_id);
             $consolidation = GuidedConsolidation::query()->findOrFail($consolidation->id);
@@ -246,6 +250,7 @@ class GuidedAssessmentWorkflowService
 
     public function acceptEvidence(GuidedDecision $decision, Evidence $evidence, User $actor, bool $accepted, string $reason): GuidedEvidenceAcceptance
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         return DB::transaction(function () use ($decision, $evidence, $actor, $accepted, $reason): GuidedEvidenceAcceptance {
             $runId = $decision->consolidation->guided_assessment_id;
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
@@ -282,6 +287,7 @@ class GuidedAssessmentWorkflowService
     /** Approval is always performed by an assigned reviewer, never by a submitting respondent. */
     public function approve(GuidedDecision $decision, User $actor, string $notes, bool $approved = true): GuidedDecision
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         return DB::transaction(function () use ($decision, $actor, $notes, $approved): GuidedDecision {
             $runId = $decision->consolidation->guided_assessment_id;
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
@@ -326,6 +332,7 @@ class GuidedAssessmentWorkflowService
 
     public function nextStage(GuidedDecision $decision, GuidedAssessment $run): ?string
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $stages = ['assessor'];
         if ($decision->risk_score >= $run->high_risk_threshold) { $stages[] = 'risk_owner'; }
         if ($decision->risk_score >= $run->critical_risk_threshold
@@ -342,6 +349,7 @@ class GuidedAssessmentWorkflowService
     /** Explicit publication avoids overwriting later edits to legacy SoA/assessment rows. */
     public function publish(GuidedDecision $decision, User $actor): void
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         DB::transaction(function () use ($decision, $actor): void {
             $runId = $decision->consolidation->guided_assessment_id;
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
@@ -395,6 +403,7 @@ class GuidedAssessmentWorkflowService
 
     public function lock(GuidedAssessment $run, User $actor): void
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
         DB::transaction(function () use ($run): void {
             $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($run->id);
