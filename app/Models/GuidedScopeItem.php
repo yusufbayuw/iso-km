@@ -21,6 +21,9 @@ class GuidedScopeItem extends Model
     protected static function booted(): void
     {
         $guard = static function (self $item): void {
+            if (auth()->check()) {
+                app(\App\Services\GuidedFeatureGate::class)->assertEnabled();
+            }
             if (! in_array($item->kind, ['asset', 'activity'], true)) {
                 throw ValidationException::withMessages(['kind' => 'Jenis inventaris tidak dikenal.']);
             }
