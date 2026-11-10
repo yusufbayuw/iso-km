@@ -43,7 +43,10 @@ class GuidedAssessmentWorkflowService
         if ($question->guided_question_bank_id !== $run->guided_question_bank_id) {
             throw ValidationException::withMessages(['question' => 'Pertanyaan tidak berasal dari bank asesmen ini.']);
         }
-        return DB::transaction(function () use ($run, $question, $respondent, $dueAt): GuidedAssignment {
+        return DB::transaction(function () use ($run, $question, $respondent, $actor, $dueAt): GuidedAssignment {
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($run->id);
+            $this->assertMutable($run);
+            $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
             $run->memberships()->firstOrCreate(['user_id' => $respondent->id, 'role' => 'respondent']);
             return $run->assignments()->firstOrCreate(
                 ['guided_question_id' => $question->id, 'user_id' => $respondent->id],
@@ -56,8 +59,8 @@ class GuidedAssessmentWorkflowService
     public function submitAnswer(GuidedAssignment $assignment, User $actor, array $response, string $contextKey = 'general', ?string $notes = null, array $evidenceIds = [], ?int $supersedesId = null): GuidedAnswer
     {
         return DB::transaction(function () use ($assignment, $actor, $response, $contextKey, $notes, $evidenceIds, $supersedesId): GuidedAnswer {
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($assignment->guided_assessment_id);
             $assignment = GuidedAssignment::query()->lockForUpdate()->findOrFail($assignment->id);
-            $run = $assignment->assessment;
             $this->assertMutable($run);
             if ($assignment->user_id !== $actor->id || ! $actor->can('guided.answer.submit')) {
                 throw ValidationException::withMessages(['authorization' => 'Hanya responden yang ditugaskan boleh mengirim jawaban.']);
@@ -130,6 +133,9 @@ class GuidedAssessmentWorkflowService
             throw ValidationException::withMessages(['sources' => 'Pilih jawaban sumber dan isi kesimpulan yang valid.']);
         }
         return DB::transaction(function () use ($run, $question, $actor, $sourceAnswerIds, $summary, $method, $contextKey, $reason): GuidedConsolidation {
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($run->id);
+            $this->assertMutable($run);
+            $this->allow($run, $actor, 'guided.consolidate', ['coordinator', 'consolidator']);
             $sourceQuery = GuidedAnswer::query()->whereIn('id', $sourceAnswerIds)
                 ->where('guided_assessment_id', $run->id)->where('guided_question_id', $question->id);
             if ($contextKey !== '*') { $sourceQuery->where('context_key', $contextKey); }
@@ -255,8 +261,9 @@ class GuidedAssessmentWorkflowService
     public function approve(GuidedDecision $decision, User $actor, string $notes, bool $approved = true): GuidedDecision
     {
         return DB::transaction(function () use ($decision, $actor, $notes, $approved): GuidedDecision {
+            $runId = $decision->consolidation->guided_assessment_id;
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
             $decision = GuidedDecision::query()->lockForUpdate()->findOrFail($decision->id);
-            $run = $decision->consolidation->assessment;
             $this->assertMutable($run);
             if (! in_array($decision->status, ['submitted', 'in_review'], true) || ! $decision->consolidation->is_current) {
                 throw ValidationException::withMessages(['decision' => 'Keputusan tidak dapat disetujui pada status ini.']);
@@ -314,8 +321,9 @@ class GuidedAssessmentWorkflowService
     public function publish(GuidedDecision $decision, User $actor): void
     {
         DB::transaction(function () use ($decision, $actor): void {
+            $runId = $decision->consolidation->guided_assessment_id;
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($runId);
             $decision = GuidedDecision::query()->lockForUpdate()->findOrFail($decision->id);
-            $run = $decision->consolidation->assessment;
             $this->assertMutable($run);
             $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
             if ($decision->status !== 'approved' || ! $decision->consolidation->is_current) {
