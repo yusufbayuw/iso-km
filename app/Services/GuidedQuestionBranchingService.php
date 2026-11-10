@@ -16,6 +16,7 @@ class GuidedQuestionBranchingService
     /** Conditional follow-ups do not become independent required control assessments. */
     public function rootQuestions(GuidedAssessment $run): Collection
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $questions = $run->bank->questions()->get();
         $destinations = $questions->flatMap(fn (GuidedQuestion $question) =>
             collect($question->branch_rules ?? [])->pluck('next_code'))->filter()->unique();
@@ -24,6 +25,7 @@ class GuidedQuestionBranchingService
 
     public function assignRoots(GuidedAssessment $run, User $respondent, User $coordinator): int
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $questions = $this->rootQuestions($run);
         if ($questions->isEmpty()) {
             throw ValidationException::withMessages(['questions' => 'Tidak ada pertanyaan awal yang dapat diberikan. Periksa percabangan bank.']);
@@ -41,6 +43,7 @@ class GuidedQuestionBranchingService
      */
     public function assignNext(GuidedAssignment $assignment, GuidedAnswer $answer): int
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $run = $assignment->assessment;
         $questions = $run->bank->questions()->get();
         $byId = $questions->keyBy('id');
