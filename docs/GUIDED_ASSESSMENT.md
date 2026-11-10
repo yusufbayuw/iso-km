@@ -67,8 +67,10 @@ criteria to which it might be mapped.
 
 Roles are permissions plus **membership in a specific assessment run**.
 Giving someone a global role does not automatically authorize them to approve
-every run. The permission seeder currently uses `syncPermissions()`: review
-customized production roles before re-running it.
+every run. The role seeder now preserves customized permissions on existing roles and only
+adds new Guided Assessment permission grants. New roles receive the default role
+template. Always review role membership and the separate
+`guided.evidence_pack.export_sensitive` authorization before rollout.
 
 ## Example XLSX field mapping
 
@@ -84,7 +86,9 @@ Supported sources: `assessment`, `requirement`, and `control`.
 Supported data fields in the UI include display/raw status, rationale,
 consolidation summary, risk score, evidence references, approval date, and
 applicability. The exporter copies the uploaded XLSX ZIP package and replaces
-**only configured, existing, non-formula cells** using literal cell values.
+**only configured input cells** using literal values (including creation of a
+missing input cell in an existing row). Formula cells cannot be overwritten.
+It marks Excel formulas for recalculation when the file is opened.
 All other members, including charts and original workbook parts, are left
 in place. Mapping into an Excel formula cell is rejected. A final export requires
 a locked run; a draft export leaves missing decisions blank.
@@ -101,9 +105,26 @@ standard catalog and an appropriate bank, not inferred from an example sheet.
   2022 requirement/control catalog or 93 editorially prepared questions.
   **Do not claim 100% ISO 27001 coverage until the organization loads and
   validates its licensed standard catalog.**
-- The first release provides a template cell-mapping editor, but not automatic
-  workbook-layout discovery or arbitrary row expansion. Missing mapping cells
-  are rejected rather than silently generated.
+- Template administration offers a **header/code-based mapping suggestion** and
+  a manual cell-mapping editor. It is not a universal workbook parser; formulas,
+  nonstandard table layouts, and dynamic row expansion still require UAT.
+  Final GAP Analysis exports require both status and notes/evidence mappings
+  for all bank criteria. Generic custom reports may export subsets.
+- **Import catalog XLSX** in Standard administration (with a source-license
+  declaration). ISO 27001-specific code normalization handles legacy `5.1k`
+  clause and `5.1` Annex control labels, while non-ISO standards retain
+  their own code syntax. The import never initializes an example organization's
+  data, requires privileges, and does not overwrite existing catalog entries.
+  Published or actively assessed catalog editions cannot be mutated.
+- **Evidence Pack ZIP** contains a manifest, per-evidence SHA-256 and copies
+  of currently accepted active/verified evidence. Confidential/restricted
+  (and unknown-classification) evidence is excluded by default, with a separate
+  sensitive-export permission. Export records and checksums are retained.
+- Multiple answers across different objects can be included in one human
+  consolidation using the cross-context option; later answers invalidate prior
+  active consolidations without discarding the raw evidence.
+- Risk approval strength is at least the score of linked open Risk Register
+  entries; decisions must be re-reviewed if their linked risk subsequently rises.
 - Asset registers, questionnaire-to-risk generation, recurring assessments,
   advanced conflict-resolution UX, per-role dashboard polish, and full
   multi-tenant infrastructure need follow-up work.
