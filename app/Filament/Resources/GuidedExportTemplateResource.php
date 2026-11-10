@@ -35,7 +35,7 @@ class GuidedExportTemplateResource extends Resource
             Forms\Components\Select::make('report_type')->label('Jenis Laporan')->options(['custom' => 'Laporan Kustom', 'gap_analysis' => 'GAP Analysis Lengkap'])->default('custom')->required()
                 ->helperText('GAP Analysis lengkap mensyaratkan pemetaan semua kriteria yang dinilai, bukan hanya ringkasan.'),
             Forms\Components\FileUpload::make('file_path')->label('File XLSX')->disk('local')
-                ->directory('iso/guided/templates')->visibility('private')
+                ->directory('iso/guided/templates')->visibility('private')->maxSize(20480)
                 ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->required()
                 ->helperText('File asli dipertahankan; hanya sel yang dipetakan akan diisi.')->columnSpanFull(),
             Forms\Components\Toggle::make('is_active')->label('Aktif')->default(true),
