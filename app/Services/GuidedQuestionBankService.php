@@ -19,6 +19,11 @@ class GuidedQuestionBankService
             ->where('is_group', false)->get(['id', 'code', 'title']);
         $mappedRequirements = $questions->flatMap(fn ($q) => $q->targets->pluck('requirement_id'))->filter()->unique();
         $mappedControls = $questions->flatMap(fn ($q) => $q->targets->pluck('control_id'))->filter()->unique();
+        $targetKeys = $questions->flatMap(fn ($q) => $q->targets->map(
+            fn ($t) => $t->control_id ? 'control:'.$t->control_id : 'requirement:'.$t->requirement_id
+        ));
+        $duplicateTargets = $targetKeys->countBy()->filter(fn ($count) => $count > 1)->keys()->values()->all();
+        $catalogGaps = $this->catalogGaps($bank, $requirements, $controls);
         $codes = $questions->pluck('code')->all();
         $brokenBranches = [];
         $invalidQuestions = [];
@@ -66,7 +71,40 @@ class GuidedQuestionBankService
             'missing_controls' => $controls->whereNotIn('id', $mappedControls)->pluck('code')->values()->all(),
             'broken_branches' => array_values(array_unique($brokenBranches)),
             'invalid_questions' => array_values(array_unique($invalidQuestions)),
-            'catalog_warning' => 'Cakupan hanya dapat dijamin terhadap master standar yang telah dimuat. Validasi katalog terhadap standar berlisensi diperlukan.',
+            'duplicate_targets' => $duplicateTargets,
+            'catalog_missing_requirements' => $catalogGaps['requirements'],
+            'catalog_missing_controls' => $catalogGaps['controls'],
+            'catalog_warning' => 'Cakupan dan kecukupan katalog diverifikasi terhadap kode standar; isi dan pernyataan standar harus tetap diperiksa terhadap sumber berlisensi.',
+        ];
+    }
+
+    /**
+     * ISO/IEC 27001:2022 catalog identity checks use public clause/control
+     * identifiers, never copyrighted normative wording or example-org data.
+     */
+    private function catalogGaps(GuidedQuestionBank $bank, $requirements, $controls): array
+    {
+        $standard = $bank->standard;
+        if (! $standard || strtoupper(trim($standard->code)) !== 'ISO/IEC 27001'
+            || ! str_starts_with((string) $standard->edition, '2022')) {
+            return ['requirements' => [], 'controls' => []];
+        }
+
+        $clauseCodes = [
+            '4.1','4.2','4.3','4.4', '5.1','5.2','5.3',
+            '6.1.1','6.1.2','6.1.3','6.2','6.3',
+            '7.1','7.2','7.3','7.4','7.5','7.5.1','7.5.2','7.5.3',
+            '8.1','8.2','8.3', '9.1','9.2','9.3', '10.1','10.2',
+        ];
+        $annex = [];
+        foreach ([5 => 37, 6 => 8, 7 => 14, 8 => 34] as $group => $count) {
+            for ($number = 1; $number <= $count; $number++) {
+                $annex[] = 'A.'.$group.'.'.$number;
+            }
+        }
+        return [
+            'requirements' => array_values(array_diff($clauseCodes, $requirements->pluck('code')->all())),
+            'controls' => array_values(array_diff($annex, $controls->pluck('code')->all())),
         ];
     }
 
@@ -124,7 +162,9 @@ class GuidedQuestionBankService
         }
         $coverage = $this->coverage($bank);
         if ($coverage['missing_requirements'] || $coverage['missing_controls']
-            || $coverage['broken_branches'] || $coverage['invalid_questions']) {
+            || $coverage['broken_branches'] || $coverage['invalid_questions']
+            || $coverage['catalog_missing_requirements'] || $coverage['catalog_missing_controls']
+            || $coverage['duplicate_targets']) {
             throw ValidationException::withMessages(['coverage' => 'Bank belum lengkap; periksa persyaratan, kontrol, percabangan, dan pilihan jawaban.']);
         }
         $bank->update(['status' => 'published']);
