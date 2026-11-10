@@ -27,11 +27,19 @@ class GuidedQuestionBankService
         $duplicateTargets = $targetKeys->countBy()->filter(fn ($count) => $count > 1)->keys()->values()->all();
         $catalogGaps = $this->catalogGaps($bank, $requirements, $controls);
         $codes = $questions->pluck('code')->all();
+        $branchDestinations = $questions->flatMap(fn ($question) =>
+            collect($question->branch_rules ?? [])->pluck('next_code'))->filter()->unique();
         $brokenBranches = [];
         $invalidQuestions = [];
 
         foreach ($questions as $question) {
-            if ($question->targets->isEmpty()) { $invalidQuestions[] = $question->code; }
+            // Branch-only questions gather clarification; each required ISO
+            // criterion must be reachable independently of an optional branch.
+            $isFollowup = $branchDestinations->contains($question->code);
+            if (($question->targets->isEmpty() && ! $isFollowup)
+                || ($isFollowup && $question->targets->isNotEmpty())) {
+                $invalidQuestions[] = $question->code;
+            }
             $options = $question->answer_options ?? [];
             if ($question->answer_type === 'single_choice' && (! is_array($options) || count($options) === 0)) {
                 $invalidQuestions[] = $question->code;
