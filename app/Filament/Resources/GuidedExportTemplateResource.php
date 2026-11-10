@@ -30,6 +30,8 @@ class GuidedExportTemplateResource extends Resource
                 ->relationship('system', 'name')->searchable()->preload()
                 ->helperText('Kosong = template berlaku untuk semua sistem manajemen dalam instalasi ini.'),
             Forms\Components\TextInput::make('name')->label('Nama Template')->required(),
+            Forms\Components\Select::make('report_type')->label('Jenis Laporan')->options(['custom' => 'Laporan Kustom', 'gap_analysis' => 'GAP Analysis Lengkap'])->default('custom')->required()
+                ->helperText('GAP Analysis lengkap mensyaratkan pemetaan semua kriteria yang dinilai, bukan hanya ringkasan.'),
             Forms\Components\FileUpload::make('file_path')->label('File XLSX')->disk('local')
                 ->directory('iso/guided/templates')->visibility('private')
                 ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->required()
