@@ -74,7 +74,7 @@ class GuidedQuestionBankTest extends TestCase
             'guided_question_id' => $root->id, 'requirement_id' => $requirement->id, 'criterion' => 'Declaration',
         ]);
         GuidedQuestionTarget::create([
-            'guided_question_id' => $detail->id, 'control_id' => $control->id, 'criterion' => 'Detailed evidence',
+            'guided_question_id' => $root->id, 'control_id' => $control->id, 'criterion' => 'Operational control',
         ]);
         app(GuidedQuestionBankService::class)->publish($bank, $manager);
         $run = GuidedAssessment::create([
