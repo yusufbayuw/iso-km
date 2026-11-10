@@ -27,6 +27,12 @@ class GuidedAssessmentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     private function actor(string $label, array $abilities): User
     {
         $user = User::create([
