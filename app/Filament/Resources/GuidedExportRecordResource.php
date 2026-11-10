@@ -19,7 +19,7 @@ class GuidedExportRecordResource extends Resource
     protected static ?string $navigationLabel = 'Riwayat Ekspor';
     protected static ?int $navigationSort = 26;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.report.export') ?? false; }
+    public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.report.export') ?? false); }
     public static function canCreate(): bool { return false; }
     public static function canEdit($record): bool { return false; }
     public static function canDelete($record): bool { return false; }
