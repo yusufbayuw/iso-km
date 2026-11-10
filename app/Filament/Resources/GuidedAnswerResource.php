@@ -45,20 +45,23 @@ class GuidedAnswerResource extends Resource
             Tables\Actions\Action::make('consolidate')->label('Konsolidasikan')->icon('heroicon-o-squares-plus')
                 ->form([
                     Forms\Components\Select::make('method')->label('Metode')->options(['select' => 'Pilih Jawaban', 'merge' => 'Gabungkan', 'summary' => 'Kesimpulan Petugas'])->default('summary')->required(),
+                    Forms\Components\Toggle::make('all_contexts')->label('Gabungkan lintas sistem/aset/konteks')
+                        ->helperText('Aktifkan jika kesimpulan mewakili lebih dari satu konteks. Jawaban asli tetap disimpan.')
+                        ->live()->default(false),
                     Forms\Components\Select::make('source_ids')->label('Jawaban Sumber')->multiple()->searchable()->required()
-                        ->options(fn (GuidedAnswer $record) => GuidedAnswer::query()
+                        ->options(fn (GuidedAnswer $record, Forms\Get $get) => GuidedAnswer::query()
                             ->where('guided_assessment_id', $record->guided_assessment_id)
                             ->where('guided_question_id', $record->guided_question_id)
-                            ->where('context_key', $record->context_key)
+                            ->when(! $get('all_contexts'), fn ($q) => $q->where('context_key', $record->context_key))
                             ->with('respondent')->orderBy('id')->get()
-                            ->mapWithKeys(fn (GuidedAnswer $a) => [$a->id => '#'.$a->id.' - '.($a->respondent?->name ?? '-').' - '.(string) ($a->response['value'] ?? '')])->all())
+                            ->mapWithKeys(fn (GuidedAnswer $a) => [$a->id => '#'.$a->id.' ['.$a->context_key.'] '.($a->respondent?->name ?? '-').' - '.(string) ($a->response['value'] ?? '')])->all())
                         ->default(fn (GuidedAnswer $record) => [$record->id]),
                     Forms\Components\Textarea::make('summary')->label('Hasil Konsolidasi')->required(),
                     Forms\Components\Textarea::make('reason')->label('Alasan pemilihan dan penggabungan')->required(),
                 ])->action(function (GuidedAnswer $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->consolidate(
                         $record->assessment, $record->question, auth()->user(), $data['source_ids'],
-                        $data['summary'], $data['method'], $record->context_key, $data['reason']
+                        $data['summary'], $data['method'], ! empty($data['all_contexts']) ? '*' : $record->context_key, $data['reason']
                     );
                     Notification::make()->success()->title('Versi konsolidasi baru dibuat')->send();
                 }),
