@@ -23,6 +23,7 @@ class GuidedWorkbookMappingService
      */
     public function suggest(GuidedExportTemplate $template, ?int $standardIdOverride = null): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $template->management_system_id && ! $standardIdOverride) {
             throw ValidationException::withMessages(['template' => 'Pilih sistem manajemen sebagai konteks deteksi pemetaan.']);
         }
