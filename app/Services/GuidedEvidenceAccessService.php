@@ -17,6 +17,7 @@ class GuidedEvidenceAccessService
      */
     public function selectableQuery(GuidedAssignment $assignment, User $actor): Builder
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if ($assignment->user_id !== $actor->id
             || ! $actor->can('guided.answer.submit')
             || ! $assignment->assessment->isMember($actor, ['respondent'])) {
@@ -35,6 +36,7 @@ class GuidedEvidenceAccessService
 
     public function assertSelectable(GuidedAssignment $assignment, User $actor, array $evidenceIds): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $ids = array_values(array_unique(array_map('intval', $evidenceIds)));
         if ($ids && ($this->selectableQuery($assignment, $actor)->whereIn('id', $ids)->count() !== count($ids))) {
             throw ValidationException::withMessages(['evidence' => 'Evidence di luar lingkup, rahasia, atau tidak dapat diakses.']);
