@@ -165,8 +165,10 @@ class GuidedAssessmentWorkflowService
 
     public function propose(GuidedConsolidation $consolidation, GuidedQuestionTarget $target, User $actor, string $status, int $riskScore, string $rationale, ?int $riskOwnerId = null, ?bool $applicable = null): GuidedDecision
     {
-        $run = $consolidation->assessment;
-        $this->assertMutable($run);
+        return DB::transaction(function () use ($consolidation, $target, $actor, $status, $riskScore, $rationale, $riskOwnerId, $applicable): GuidedDecision {
+            $run = GuidedAssessment::query()->lockForUpdate()->findOrFail($consolidation->guided_assessment_id);
+            $consolidation = GuidedConsolidation::query()->findOrFail($consolidation->id);
+            $this->assertMutable($run);
         $this->allow($run, $actor, 'guided.consolidate', ['coordinator', 'consolidator']);
         if (! $consolidation->is_current || $target->guided_question_id !== $consolidation->guided_question_id || $riskScore < 1 || $riskScore > 25 || trim($rationale) === '') {
             throw ValidationException::withMessages(['decision' => 'Konsolidasi, kriteria, risiko, atau justifikasi tidak valid.']);
@@ -207,8 +209,9 @@ class GuidedAssessmentWorkflowService
             ['guided_consolidation_id' => $consolidation->id, 'guided_question_target_id' => $target->id],
             ['proposed_status' => $status, 'applicable' => $applicable, 'rationale' => $rationale,
              'risk_score' => $riskScore, 'risk_owner_id' => $riskOwnerId,
-             'baseline_status' => $baselineStatus, 'baseline_updated_at' => $source?->updated_at],
-        );
+                 'baseline_status' => $baselineStatus, 'baseline_updated_at' => $source?->updated_at],
+            );
+        });
     }
 
     private function linkedRisks(GuidedQuestionTarget $target, GuidedAssessment $run)
