@@ -20,6 +20,7 @@ class GuidedEvidencePackService
      */
     public function export(GuidedAssessment $run, User $actor, bool $includeSensitive = false): string
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $actor->can('guided.report.export') || ! $run->isMember($actor, ['coordinator'])) {
             throw ValidationException::withMessages(['authorization' => 'Tidak berwenang mengekspor evidence asesmen ini.']);
         }
