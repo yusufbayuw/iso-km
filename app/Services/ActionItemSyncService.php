@@ -66,36 +66,43 @@ class ActionItemSyncService
             });
         })->each(fn (SupplierAssessment $item) => $changes += $this->project($item, 'supplier_treatment', $item->supplier?->owner_id, $item->management_system_id, 'Tangani risiko supplier '.($item->supplier?->code ?? ''), $item->required_actions ?: $item->summary, $item->next_review_at));
 
-        GuidedAssignment::query()->with(['assessment', 'question'])
-            ->whereIn('status', ['assigned', 'in_progress'])
-            ->whereHas('assessment', fn ($q) => $q->whereNotIn('status', ['locked', 'closed']))
-            ->each(fn (GuidedAssignment $item) => $changes += $this->project(
-                $item, 'guided_interview', $item->user_id, $item->assessment?->management_system_id,
-                'Jawab wawancara: '.($item->question?->code ?? ''), $item->question?->prompt, $item->due_at
-            ));
+        if (config('iso-km.guided_assessment_enabled', false)) {
+            GuidedAssignment::query()->with(['assessment', 'question'])
+                ->whereIn('status', ['assigned', 'in_progress'])
+                ->whereHas('assessment', fn ($q) => $q->whereNotIn('status', ['locked', 'closed']))
+                ->each(fn (GuidedAssignment $item) => $changes += $this->project(
+                    $item, 'guided_interview', $item->user_id, $item->assessment?->management_system_id,
+                    'Jawab wawancara: '.($item->question?->code ?? ''), $item->question?->prompt, $item->due_at
+                ));
+    
+            GuidedDecision::query()->with(['consolidation.assessment', 'consolidation.question', 'target'])
+                ->whereIn('status', ['submitted', 'in_review'])
+                ->whereHas('consolidation', fn ($q) => $q->where('is_current', true)
+                    ->whereHas('assessment', fn ($a) => $a->whereNotIn('status', ['locked', 'closed'])))
+                ->each(function (GuidedDecision $item) use (&$changes): void {
+                    $run = $item->consolidation->assessment;
+                    $needsEvidence = in_array($item->proposed_status, ['implemented', 'conformant'], true)
+                        && ! $item->acceptances()->where('status', 'accepted')->exists();
+                    $stage = $needsEvidence ? 'reviewer' : app(GuidedAssessmentWorkflowService::class)->nextStage($item, $run);
+                    if (! $stage) { return; }
+                    $ownerId = $stage === 'risk_owner' ? $item->risk_owner_id
+                        : $run->memberships()->where('role', $stage)->value('user_id');
+                    $changes += $this->project(
+                        $item, $needsEvidence ? 'guided_evidence_review' : 'guided_review',
+                        $ownerId, $run->management_system_id,
+                        'Review asesmen: '.($item->consolidation->question?->code ?? ''),
+                        'Tahap persetujuan: '.$stage.'; kriteria #'.$item->guided_question_target_id,
+                        null
+                    );
+                });
+    
+            }
 
-        GuidedDecision::query()->with(['consolidation.assessment', 'consolidation.question', 'target'])
-            ->whereIn('status', ['submitted', 'in_review'])
-            ->whereHas('consolidation', fn ($q) => $q->where('is_current', true)
-                ->whereHas('assessment', fn ($a) => $a->whereNotIn('status', ['locked', 'closed'])))
-            ->each(function (GuidedDecision $item) use (&$changes): void {
-                $run = $item->consolidation->assessment;
-                $needsEvidence = in_array($item->proposed_status, ['implemented', 'conformant'], true)
-                    && ! $item->acceptances()->where('status', 'accepted')->exists();
-                $stage = $needsEvidence ? 'reviewer' : app(GuidedAssessmentWorkflowService::class)->nextStage($item, $run);
-                if (! $stage) { return; }
-                $ownerId = $stage === 'risk_owner' ? $item->risk_owner_id
-                    : $run->memberships()->where('role', $stage)->value('user_id');
-                $changes += $this->project(
-                    $item, $needsEvidence ? 'guided_evidence_review' : 'guided_review',
-                    $ownerId, $run->management_system_id,
-                    'Review asesmen: '.($item->consolidation->question?->code ?? ''),
-                    'Tahap persetujuan: '.$stage.'; kriteria #'.$item->guided_question_target_id,
-                    null
-                );
-            });
-
-        $stale = ActionItem::query()->where('is_generated', true)->where('status', '!=', 'completed')->when($this->seen !== [], fn ($query) => $query->whereNotIn('action_key', array_keys($this->seen)))->update(['status' => 'completed', 'completed_at' => now()]);
+        $stale = ActionItem::query()->where('is_generated', true)->where('status', '!=', 'completed')
+            ->when(! config('iso-km.guided_assessment_enabled', false), fn ($query) =>
+                $query->whereNotIn('category', ['guided_interview', 'guided_evidence_review', 'guided_review']))
+            ->when($this->seen !== [], fn ($query) => $query->whereNotIn('action_key', array_keys($this->seen)))
+            ->update(['status' => 'completed', 'completed_at' => now()]);
 
         return $changes + $stale;
     }
