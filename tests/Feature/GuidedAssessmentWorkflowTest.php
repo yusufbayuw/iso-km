@@ -81,7 +81,7 @@ class GuidedAssessmentWorkflowTest extends TestCase
         extract($this->setupAssessment());
         $service = app(GuidedAssessmentWorkflowService::class);
         $respondent = $this->actor('Respondent', ['guided.answer.submit', 'view_any_evidence']);
-        $reviewer = $this->actor('Reviewer', ['guided.evidence.review']);
+        $reviewer = $this->actor('Reviewer', ['guided.evidence.review', 'view_evidence']);
         $assessor = $this->actor('Assessor', ['guided.assessment.review']);
         $riskOwner = $this->actor('Riskowner', ['guided.risk.approve']);
         $management = $this->actor('Management', ['guided.management.approve']);
@@ -129,7 +129,7 @@ class GuidedAssessmentWorkflowTest extends TestCase
         $service = app(GuidedAssessmentWorkflowService::class);
         $respondent = $this->actor('Submitter', ['guided.answer.submit', 'view_any_evidence', 'guided.assessment.review']);
         $run->memberships()->create(['user_id' => $respondent->id, 'role' => 'assessor']);
-        $reviewer = $this->actor('Verifier', ['guided.evidence.review']);
+        $reviewer = $this->actor('Verifier', ['guided.evidence.review', 'view_evidence']);
         $run->memberships()->create(['user_id' => $reviewer->id, 'role' => 'reviewer']);
         $assignment = $service->assign($run, $question, $respondent, $coordinator);
         $evidence = Evidence::create([
