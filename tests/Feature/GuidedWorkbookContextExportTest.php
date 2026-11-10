@@ -154,6 +154,36 @@ class GuidedWorkbookContextExportTest extends TestCase
         return compact('path', 'run', 'person', 'template');
     }
 
+    public function test_scope_inventory_cannot_change_after_assessment_is_locked(): void
+    {
+        extract($this->fixture());
+        $asset = GuidedScopeItem::query()->firstOrFail();
+        $this->expectException(ValidationException::class);
+        $asset->update(['title' => 'Unauthorized post-lock change']);
+    }
+
+    public function test_risk_with_more_controls_than_template_columns_cannot_be_exported_silently(): void
+    {
+        extract($this->fixture());
+        $zip = new ZipArchive();
+        $this->assertTrue($zip->open(Storage::disk('local')->path($path)) === true);
+        $source = $zip->getFromName('xl/worksheets/sheet2.xml');
+        $zip->addFromString('xl/worksheets/sheet2.xml', str_replace('Template Organization', '', $source));
+        $zip->close();
+        $risk = Risk::query()->firstOrFail();
+        foreach (['A.5.2', 'A.5.3', 'A.5.4'] as $code) {
+            $other = Control::create(['standard_id' => $run->system->standard_id,
+                'code' => $code, 'title' => 'Additional control']);
+            $risk->controls()->attach($other);
+        }
+        try {
+            app(GuidedWorkbookExportService::class)->export($run, $template, $person);
+            $this->fail('Fourth linked risk control must not disappear from final report.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('template', $exception->errors());
+        }
+    }
+
     public function test_final_export_blocks_foreign_organization_and_then_replaces_old_context_rows(): void
     {
         extract($this->fixture());
