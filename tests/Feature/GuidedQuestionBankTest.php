@@ -16,6 +16,7 @@ use App\Services\GuidedAssessmentWorkflowService;
 use App\Services\GuidedQuestionBankService;
 use App\Services\GuidedQuestionBranchingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -85,6 +86,29 @@ class GuidedQuestionBankTest extends TestCase
         $assignment = $run->assignments()->firstOrFail();
         app(GuidedAssessmentWorkflowService::class)->submitAnswer($assignment, $user, ['value' => 'yes']);
         $this->assertSame(2, $run->assignments()->count());
-        $this->assertSame('assigned', $run->assignments()->where('guided_question_id', $detail->id)->firstOrFail()->status);
+        $followup = $run->assignments()->where('guided_question_id', $detail->id)->firstOrFail();
+        $this->assertSame('assigned', $followup->status);
+        $this->assertTrue($followup->is_auto_assigned);
+
+        $service = app(GuidedAssessmentWorkflowService::class);
+        $service->submitAnswer($assignment, $user, ['value' => 'no']);
+        $this->assertSame('skipped', $followup->refresh()->status);
+        try {
+            $service->submitAnswer($followup, $user, ['value' => 'yes']);
+            $this->fail('An inactive follow-up must reject new answers.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('assignment', $exception->errors());
+        }
+
+        $service->submitAnswer($assignment, $user, ['value' => 'yes'], 'database');
+        $this->assertSame('assigned', $followup->refresh()->status);
+        $service->submitAnswer($followup, $user, ['value' => 'yes']);
+        $this->assertSame('submitted', $followup->refresh()->status);
+        $service->submitAnswer($assignment, $user, ['value' => 'no'], 'general');
+        $this->assertSame('submitted', $followup->refresh()->status,
+            'A different active context must keep the branch available.');
+        $service->submitAnswer($assignment, $user, ['value' => 'no'], 'database');
+        $this->assertSame('skipped', $followup->refresh()->status);
+        $this->assertDatabaseCount('guided_answers', 6);
     }
 }
