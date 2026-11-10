@@ -47,6 +47,7 @@ class GuidedAssessment extends Model
     public function memberships(): HasMany { return $this->hasMany(GuidedAssessmentMembership::class); }
     public function assignments(): HasMany { return $this->hasMany(GuidedAssignment::class); }
     public function answers(): HasMany { return $this->hasMany(GuidedAnswer::class); }
+    public function scopeItems(): HasMany { return $this->hasMany(GuidedScopeItem::class); }
     public function consolidations(): HasMany { return $this->hasMany(GuidedConsolidation::class); }
     public function isMember(User $user, array $roles = []): bool
     {
