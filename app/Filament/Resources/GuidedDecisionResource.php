@@ -51,6 +51,7 @@ class GuidedDecisionResource extends Resource
         ])->actions([
             Tables\Actions\Action::make('evidence')->label('Nilai Evidence')->icon('heroicon-o-document-magnifying-glass')
                 ->visible(fn (GuidedDecision $record) => auth()->user()?->can('guided.evidence.review')
+                    && (auth()->user()?->can('view_evidence') ?? false)
                     && $record->consolidation->assessment->isMember(auth()->user(), ['reviewer', 'assessor'])
                     && in_array($record->status, ['submitted', 'evidence_review'], true))
                 ->form([
