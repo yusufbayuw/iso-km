@@ -15,6 +15,7 @@ class GuidedWorkbookContextMappingService
     /** Detect generic profile, risk and inventory tables by their COLUMN LABELS. */
     public function suggest(ZipArchive $zip, array $shared, array $parts): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $mappings = [];
         $capacities = ['risk_index' => 0, 'asset_index' => 0, 'activity_index' => 0];
         $warnings = [];
