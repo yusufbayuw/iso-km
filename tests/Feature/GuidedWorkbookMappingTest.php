@@ -18,6 +18,12 @@ class GuidedWorkbookMappingTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_detects_clause_and_control_rows_without_using_organization_identity(): void
     {
         Storage::fake('local');
