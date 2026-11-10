@@ -27,6 +27,7 @@ class GuidedStandardCatalogImportService
      */
     public function import(Standard $standard, string $relativeFile, User $actor, bool $includeDescriptions = false): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $actor->can('guided.bank.manage') || ! $actor->can('update_standard')) {
             throw ValidationException::withMessages(['authorization' => 'Diperlukan hak pengelolaan master standar dan bank pertanyaan.']);
         }
