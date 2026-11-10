@@ -80,7 +80,7 @@ class GuidedAssessmentWorkflowService
                 throw ValidationException::withMessages(['response' => 'Tanggal harus berformat YYYY-MM-DD.']);
             }
             $contextKey = trim($contextKey);
-            if ($contextKey === '' || mb_strlen($contextKey) > 150 || $response === []) {
+            if ($contextKey === '*' || $contextKey === '' || mb_strlen($contextKey) > 150 || $response === []) {
                 throw ValidationException::withMessages(['response' => 'Jawaban dan konteks wajib diisi.']);
             }
             if ($supersedesId !== null && ! GuidedAnswer::query()
@@ -102,6 +102,13 @@ class GuidedAssessmentWorkflowService
                 'submitted_at' => now(),
             ]);
             if ($evidenceIds) { $answer->evidences()->sync($evidenceIds); }
+            // New factual input invalidates prior conclusions for this context (or all contexts).
+            // Keep the historical consolidation and approval records for audit.
+            GuidedConsolidation::query()
+                ->where('guided_assessment_id', $run->id)
+                ->where('guided_question_id', $assignment->guided_question_id)
+                ->whereIn('context_key', [$contextKey, '*'])
+                ->where('is_current', true)->update(['is_current' => false]);
             $assignment->update(['status' => 'submitted']);
             app(GuidedQuestionBranchingService::class)->assignNext($assignment, $answer);
             return $answer;
@@ -122,9 +129,10 @@ class GuidedAssessmentWorkflowService
             throw ValidationException::withMessages(['sources' => 'Pilih jawaban sumber dan isi kesimpulan yang valid.']);
         }
         return DB::transaction(function () use ($run, $question, $actor, $sourceAnswerIds, $summary, $method, $contextKey, $reason): GuidedConsolidation {
-            $count = GuidedAnswer::query()->whereIn('id', $sourceAnswerIds)
-                ->where('guided_assessment_id', $run->id)->where('guided_question_id', $question->id)
-                ->where('context_key', $contextKey)->count();
+            $sourceQuery = GuidedAnswer::query()->whereIn('id', $sourceAnswerIds)
+                ->where('guided_assessment_id', $run->id)->where('guided_question_id', $question->id);
+            if ($contextKey !== '*') { $sourceQuery->where('context_key', $contextKey); }
+            $count = $sourceQuery->count();
             if ($count !== count($sourceAnswerIds)) {
                 throw ValidationException::withMessages(['sources' => 'Semua jawaban sumber harus berasal dari pertanyaan, konteks, dan asesmen yang sama.']);
             }
@@ -132,6 +140,11 @@ class GuidedAssessmentWorkflowService
                 ->where('guided_question_id', $question->id)->where('context_key', $contextKey)
                 ->orderByDesc('version')->lockForUpdate()->first();
             if ($previous) { $previous->update(['is_current' => false]); }
+            if ($contextKey === '*') {
+                GuidedConsolidation::query()->where('guided_assessment_id', $run->id)
+                    ->where('guided_question_id', $question->id)->where('is_current', true)
+                    ->update(['is_current' => false]);
+            }
             $consolidation = GuidedConsolidation::query()->create([
                 'guided_assessment_id' => $run->id, 'guided_question_id' => $question->id,
                 'context_key' => $contextKey, 'version' => ($previous?->version ?? 0) + 1,
@@ -159,6 +172,13 @@ class GuidedAssessmentWorkflowService
         }
         if ($riskScore >= $run->high_risk_threshold && ! $riskOwnerId) {
             throw ValidationException::withMessages(['risk_owner_id' => 'Pemilik risiko wajib ditentukan untuk risiko tinggi.']);
+        }
+        $competing = GuidedDecision::query()->where('guided_question_target_id', $target->id)
+            ->where('guided_consolidation_id', '!=', $consolidation->id)
+            ->whereHas('consolidation', fn ($q) => $q->where('guided_assessment_id', $run->id)->where('is_current', true))
+            ->exists();
+        if ($competing) {
+            throw ValidationException::withMessages(['decision' => 'Ada penilaian aktif lain untuk kriteria ini. Konsolidasikan lintas konteks terlebih dahulu.']);
         }
         $source = $target->control_id
             ? StatementOfApplicability::query()->where('management_system_id', $run->management_system_id)->where('control_id', $target->control_id)->first()
@@ -276,6 +296,17 @@ class GuidedAssessmentWorkflowService
             }
             if ($decision->synced_at) { return; }
             $target = $decision->target;
+            $hasCompetingOutcome = GuidedDecision::query()
+                ->whereKeyNot($decision->id)
+                ->whereHas('consolidation', fn ($q) => $q->where('guided_assessment_id', $run->id)->where('is_current', true))
+                ->whereHas('target', function ($q) use ($target): void {
+                    $target->control_id
+                        ? $q->where('control_id', $target->control_id)
+                        : $q->where('requirement_id', $target->requirement_id);
+                })->exists();
+            if ($hasCompetingOutcome) {
+                throw ValidationException::withMessages(['decision' => 'Ada beberapa kriteria aktif untuk kontrol/persyaratan yang sama. Hasil akhir memerlukan konsolidasi tingkat kontrol sebelum publikasi.']);
+            }
             $query = $target->control_id
                 ? StatementOfApplicability::query()->where('management_system_id', $run->management_system_id)->where('control_id', $target->control_id)
                 : RequirementAssessment::query()->where('management_system_id', $run->management_system_id)->where('requirement_id', $target->requirement_id);
