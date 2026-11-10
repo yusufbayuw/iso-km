@@ -58,8 +58,9 @@ return new class extends Migration
             $table->id();
             $table->morphs('remindable');
             $table->foreignId('recipient_id')->constrained('users')->cascadeOnDelete();
-            $table->string('category');
-            $table->string('reminder_key');
+            // Keep the composite unique index below MySQL utf8mb4's 3072-byte limit.
+            $table->string('category', 80);
+            $table->string('reminder_key', 191);
             $table->timestamp('sent_at');
             $table->timestamps();
             $table->unique(['remindable_type', 'remindable_id', 'recipient_id', 'category', 'reminder_key'], 'reminder_dispatch_unique');

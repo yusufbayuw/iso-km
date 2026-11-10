@@ -12,6 +12,9 @@ class IsoRolePermissionSeeder extends Seeder
     {
         $workflowPermissions = [
             'portal.access',
+            'guided.bank.manage','guided.template.manage','guided.assessment.view','guided.assessment.manage','guided.answer.submit',
+            'guided.consolidate','guided.evidence.review','guided.assessment.review',
+            'guided.risk.approve','guided.management.approve','guided.report.export',
             'document.submit_review','document.review','document.review_any','document.approve','document.approve_any','document.make_effective','document.obsolete','document.acknowledge',
             'evidence.manage','evidence.verify','evidence_request.view_all','action_item.view_all','assurance.refresh','assurance.report','auditor_workspace.view','audit_pack.export',
             'external_audit_access.manage','external_auditor_workspace.view','external_audit_pack.export',
@@ -34,13 +37,18 @@ class IsoRolePermissionSeeder extends Seeder
 
         $allPermissions = array_values(array_unique(array_merge($workflowPermissions, ...array_values($crudByEntity))));
         foreach ($allPermissions as $permission) { Permission::findOrCreate($permission, 'web'); }
+        // Sensitive evidence-pack export is deliberately NOT part of ordinary coordinator roles.
+        Permission::findOrCreate('guided.evidence_pack.export_sensitive', 'web');
+        // Global system/template administration is never granted to ordinary coordinators.
+        Permission::findOrCreate('guided.system.manage_all', 'web');
+        Permission::findOrCreate('guided.template.manage_global', 'web');
 
         $templates = [
             'iso_manager' => $allPermissions,
             'iso_coordinator' => $allPermissions,
             'document_controller' => array_merge(
                 ['portal.access'],$crudByEntity['document'],$crudByEntity['evidence'],$crudByEntity['evidence::schedule'],$this->readPermissions('evidence::request'),$this->readPermissions('action::item'),
-                ['document.submit_review','document.review','document.review_any','document.make_effective','document.obsolete','evidence.manage','evidence.verify','evidence_request.view_all','activity_log.view']
+                ['guided.evidence.review','document.submit_review','document.review','document.review_any','document.make_effective','document.obsolete','evidence.manage','evidence.verify','evidence_request.view_all','activity_log.view']
             ),
             'document_approver' => array_merge(['portal.access'],$this->readPermissions('document'),$this->readPermissions('evidence'),['document.approve','document.approve_any','document.make_effective']),
             'internal_auditor' => array_merge(
@@ -48,14 +56,14 @@ class IsoRolePermissionSeeder extends Seeder
                 $this->readPermissions('action::item'),$this->readPermissions('assurance::snapshot'),$this->readPermissions('training::program'),$this->readPermissions('training::assignment'),
                 $this->readPermissions('competency::record'),$this->readPermissions('supplier'),$this->readPermissions('supplier::assessment'),
                 $this->readPermissions('requirement::mapping'),$this->readPermissions('control::mapping'),$this->readPermissions('evidence::reuse'),
-                ['audit.perform','finding.respond','evidence.verify','assurance.report','auditor_workspace.view','audit_pack.export','cross_standard_workspace.view','activity_log.view']
+                ['guided.assessment.view','guided.evidence.review','guided.assessment.review','audit.perform','finding.respond','evidence.verify','assurance.report','auditor_workspace.view','audit_pack.export','cross_standard_workspace.view','activity_log.view']
             ),
             'process_owner' => array_merge(
                 ['portal.access'],$this->readPermissions('requirement'),$this->readPermissions('control'),$this->readPermissions('action::item'),$this->readPermissions('evidence::request'),
                 $this->readPermissions('training::program'),$this->readPermissions('competency::record'),$this->readPermissions('supplier'),$this->readPermissions('supplier::assessment'),
                 $this->readPermissions('requirement::mapping'),$this->readPermissions('control::mapping'),$this->readPermissions('evidence::reuse'),
                 $crudByEntity['evidence'],$crudByEntity['risk'],$crudByEntity['objective'],$crudByEntity['corrective::action'],
-                ['finding.respond','capa.manage','risk.manage','objective.manage','document.submit_review','document.acknowledge','training.complete','cross_standard_workspace.view']
+                ['guided.assessment.view','guided.answer.submit','guided.risk.approve','finding.respond','capa.manage','risk.manage','objective.manage','document.submit_review','document.acknowledge','training.complete','cross_standard_workspace.view']
             ),
             'training_coordinator' => array_merge(
                 ['portal.access'],$crudByEntity['training::program'],$crudByEntity['training::assignment'],$crudByEntity['competency::record'],$this->readPermissions('evidence'),$this->readPermissions('action::item'),
@@ -70,20 +78,32 @@ class IsoRolePermissionSeeder extends Seeder
                 $this->readPermissions('training::program'),$this->readPermissions('training::assignment'),$this->readPermissions('competency::record'),$this->readPermissions('supplier'),$this->readPermissions('supplier::assessment'),
                 $this->readPermissions('requirement::mapping'),$this->readPermissions('control::mapping'),$this->readPermissions('evidence::reuse'),
                 $crudByEntity['management::review'],$crudByEntity['objective'],$crudByEntity['compliance::obligation'],
-                ['document.approve','document.approve_any','management_review.manage','objective.manage','compliance.manage','action_item.view_all','assurance.refresh','assurance.report','auditor_workspace.view','audit_pack.export','supplier.decide','cross_standard_workspace.view','activity_log.view']
+                ['guided.assessment.view','guided.management.approve','document.approve','document.approve_any','management_review.manage','objective.manage','compliance.manage','action_item.view_all','assurance.refresh','assurance.report','auditor_workspace.view','audit_pack.export','supplier.decide','cross_standard_workspace.view','activity_log.view']
             ),
             'employee' => array_merge(
                 ['portal.access'],$this->readPermissions('action::item'),$this->readPermissions('evidence::request'),$this->readPermissions('training::program'),
-                ['document.acknowledge','training.complete']
+                ['guided.assessment.view','guided.answer.submit','document.acknowledge','training.complete']
             ),
             'external_auditor' => ['portal.access','external_auditor_workspace.view','external_audit_pack.export'],
         ];
 
+        // Existing role permissions may have been customized for production.
+        // Do not erase those changes when adding the new Guided Assessment feature.
+        $guidedPermissions = array_filter($workflowPermissions, fn (string $p) => str_starts_with($p, 'guided.'));
         foreach ($templates as $roleName => $rolePermissions) {
-            Role::findOrCreate($roleName, 'web')->syncPermissions(array_values(array_unique($rolePermissions)));
+            $role = Role::findOrCreate($roleName, 'web');
+            $grants = array_values(array_unique($rolePermissions));
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($grants);
+            } else {
+                $role->givePermissionTo(array_values(array_intersect($grants, $guidedPermissions)));
+            }
         }
 
-        Role::findOrCreate('super_admin', 'web')->givePermissionTo($allPermissions);
+        Role::findOrCreate('super_admin', 'web')->givePermissionTo(array_merge($allPermissions, [
+            'guided.evidence_pack.export_sensitive', 'guided.system.manage_all',
+            'guided.template.manage_global',
+        ]));
     }
 
     private function crudPermissions(string $entity): array

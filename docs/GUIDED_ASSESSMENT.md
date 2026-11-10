@@ -1,0 +1,262 @@
+# Guided Assessment (white-label foundation)
+
+Status: first implementation slice; not yet production-ready. The initial workflow and
+test-suite live on the feature branch. Do not assume certification or complete ISO
+coverage from the presence of an assessment record.
+
+## Purpose and architecture
+
+Guided Assessment adds a structured interview front end to the existing ISO-KM
+Standard, Requirement, Control, Evidence, Risk, SoA, and Assurance modules.
+It is deliberately **organization-neutral**: standard masters and questions are not
+hard-coded to any school, foundation, company, or uploaded example workbook.
+
+A deployment can set these environment variables:
+
+- `ISO_KM_BRAND_NAME` (falls back to `APP_NAME`);
+- `ISO_KM_BRAND_LOGO` (logo asset URL);
+- `ISO_KM_PRIMARY_COLOR` (hex, e.g. `#2563eb`).
+
+These are **per-deployment** settings, not a claim that this application already has
+hard-isolated multi-tenant branding or data segregation. Management-system
+membership controls Guided Assessment data access. A multi-tenant hosting
+architecture would require its own tenancy and isolation review.
+
+## Safe merge, access policy, and activation
+
+The feature flag defaults to **off** in all installations. Merging this PR does
+not activate the Guided Assessment workflow:
+
+```dotenv
+ISO_KM_GUIDED_ASSESSMENT_ENABLED=false
+```
+
+When off, all new Filament resources deny navigation/requests, their workflow
+services refuse operations, catalog import is hidden/blocked, and generated
+Guided Assessment tasks are neither projected nor silently closed by
+`My Work`. Existing ISO-KM modules continue to operate.
+
+**Management-system access** is deliberately narrower than a global CRUD
+permission:
+
+- A user with `guided.assessment.manage` can create an assessment only when
+  they own its `ComplianceScope` or are already an assigned coordinator of
+  an assessment in that same system.
+- `guided.system.manage_all` grants all-system administration. It is granted
+  to the `super_admin` role in the permission seeder, not ordinary ISO
+  coordinators. It can also be granted explicitly where operationally approved.
+- Only authorized systems appear in the assessment and template selectors.
+  The assessment model and template model repeat the check server-side.
+- A template may have no system (global) only when the editor has
+  `guided.template.manage_global`. A coordinator with only
+  `guided.template.manage` sees and edits only templates in authorized
+  systems. Global templates remain reusable for authorized assessment exports,
+  not globally editable.
+
+The feature adds a second MySQL 8.0 CI job beside SQLite. The MySQL job
+migrates a blank database and runs the full test suite, including an assertion
+that the connection is genuinely MySQL. A few historical **migration index
+names/column lengths** were corrected for MySQL's 64-character identifier and
+utf8mb4 composite-key limits. Existing databases with these migrations already
+applied are not rewritten by `migrate`.
+
+Deployment sequence after CI and review:
+
+1. Backup the database and deploy code with the flag **off**.
+2. Run `php artisan migrate --force` against the target installation.
+3. Review and run `php artisan db:seed --class=IsoRolePermissionSeeder`.
+   Existing role customizations are preserved; the new global powers are
+   privileged separately.
+4. Assign a manager to each relevant Compliance Scope (or authorized
+   coordinator of an existing assessment), configure the catalog and question
+   banks, and confirm role separation.
+5. Complete per-role browser UAT, evidence access testing, and desktop Excel
+   verification.
+6. Set `ISO_KM_GUIDED_ASSESSMENT_ENABLED=true` and refresh the cached
+   configuration (`php artisan config:cache`) **only after** the operational
+   checks are accepted.
+
+This approach allows **merge-ready but dormant** code to enter `main`
+without representing the module as production-ready.
+
+## Human-led workflow
+
+1. The bank editor creates a versioned bank, questions, choices, conditional
+   branches, and mapped assessment criteria for a specific licensed standard
+   master. Bank publication checks coverage against **currently loaded**
+   requirements and controls. Missing items must be fixed before publication.
+2. The coordinator creates an assessment run tied to a matching management
+   system and published bank, then adds role memberships.
+3. Respondents receive initial questions; a structured answer can generate
+   conditional follow-up assignments. A respondent can submit multiple entries
+   for the same question and context. Responses are append-only, with optional
+   supersession pointers, so originals remain available.
+4. An authorized consolidator selects source answer IDs and records a selected
+   answer, merge, or documented summary. A new consolidation has a new version
+   and supersedes the prior current consolidation **without deleting source**.
+5. A proposed criterion-level decision includes status, applicability, risk score,
+   risk owner where required, and rationale. Evidence is verified in the existing
+   lifecycle, then accepted or rejected **for that criterion** separately.
+6. The assessor approves, followed by an assigned risk owner for high risk and
+   management for critical risk. Sensitive/critical N/A also escalates to
+   management. A respondent/consolidator cannot approve their own submitted
+   source.
+7. Publication to the existing Requirement Assessment or SoA is explicit and
+   checks the source record's status and timestamp to prevent overwriting
+   later manual edits. Final locking requires complete assignments and approved,
+   published decisions for all mapped criteria.
+
+Approval of a risk does **not** convert an unimplemented control into an
+implemented control. Verified evidence is not automatically sufficient for all
+criteria to which it might be mapped.
+
+## Filament navigation
+
+- **Periode Asesmen:** create run, add members, assign initial/manual questions,
+  export template, lock final state.
+- **Wawancara Saya:** answer assigned questions as many times as needed.
+- **Konsolidasi Jawaban:** select one or more original answers and explain the
+  conclusion.
+- **Hasil Konsolidasi:** propose criterion-level assessments.
+- **Review & Persetujuan:** evidence acceptance, staged approval, publishing.
+- **Bank Pertanyaan / Pertanyaan & Kriteria:** edit a draft and validate coverage.
+- **Template XLSX:** upload and map a workbook's existing cells.
+
+Roles are permissions plus **membership in a specific assessment run**.
+Giving someone a global role does not automatically authorize them to approve
+every run. The role seeder now preserves customized permissions on existing roles and only
+adds new Guided Assessment permission grants. New roles receive the default role
+template. Always review role membership and the separate
+`guided.evidence_pack.export_sensitive` authorization before rollout.
+
+## Example XLSX field mapping
+
+An organization uploads its own XLSX and specifies cell mappings. Example:
+
+| Sheet | Cell | Source | Code | Field |
+|---|---|---|---|---|
+| Control Status | E2 | control | A.8.13 | status |
+| Control Status | G2 | control | A.8.13 | evidence_refs |
+| Cover | B2 | assessment | — | name |
+
+Supported sources: `assessment`, `requirement`, and `control`.
+Supported data fields in the UI include display/raw status, rationale,
+consolidation summary, risk score, evidence references, approval date, and
+applicability. The exporter copies the uploaded XLSX ZIP package and replaces
+**only configured input cells** using literal values (including creation of a
+missing input cell in an existing row). Formula cells cannot be overwritten.
+It marks Excel formulas for recalculation when the file is opened.
+All other members, including charts and original workbook parts, are left
+in place. Mapping into an Excel formula cell is rejected. A final export requires
+a locked run; a draft export leaves missing decisions blank.
+
+The uploaded example workbook is **not** installed as the default template
+and its organization labels, worksheet names and fixed row counts are not
+hard-coded into ISO-KM. Complete coverage must be configured against a full
+standard catalog and an appropriate bank, not inferred from an example sheet.
+
+## Structured branching and audit-safe corrections
+
+- Root questions own the required requirement/control assessments.
+  Conditional follow-up questions only gather clarifying detail and cannot
+  silently become the sole source of a mandatory criterion.
+- The respondent can provide multiple answers, including separate answers
+  for individual systems/assets; the latest answer **per context** controls
+  reachability of follow-up questions.
+- Automatic follow-ups retain their original submitted answers for audit
+  when a later parent answer deactivates the branch. Inactive assignments
+  have status `skipped`, cannot accept fresh answers, and do not block locking.
+  Reactivation requires fresh answers before downstream branches may reactivate.
+- Coordinator-assigned questions are distinguished from automatic follow-ups;
+  the engine cannot silently cancel a manual assignment.
+- After a new answer, the earlier consolidation is no longer current and
+  cannot be used as a new publication without renewed review.
+
+## White-label GAP template: context and risk protection
+
+A real example workbook may already contain organization names, invented
+risk scenarios, asset titles and activity descriptions. Its contents are
+**not** standard master data and are never imported as defaults.
+
+Guided Assessment now provides the `Inventaris Konteks` menu for per-run,
+coordinator-owned information assets and activities, while the existing
+`Risk Register` remains the source for risks and related controls.
+
+A template mapping detector looks for general column headings and can map:
+
+- Requirement and control IDs to implementation status, notes/evidence and
+  N/A justifications.
+- Organization, assessed unit/scope, assessor names and assessment date.
+  Configure `ISO_KM_ORGANIZATION_NAME` for the deployment's organization
+  identity and optionally `ISO_KM_ASSESSOR_ROLE`.
+- Information asset and activity rows to the inventory associated with
+  that specific assessment run.
+- Risk rows to risks in the same management system, including actual
+  likelihood, impact, category, description, linked controls and treatment.
+
+A **final** GAP export refuses mismatched prefilled organization names,
+unmapped recognized context input cells, and more risk/inventory records
+than the template has rows. Records absent from the organization are
+exported as blank input cells rather than sample data. If a risk has more
+linked controls than the available template columns, export is blocked
+rather than truncating those links.
+
+This cannot make an arbitrary, organization-specific source workbook
+neutral automatically: administrators must review free-text instructions,
+fixed captions and any unrecognized areas before using it for another
+organization. The original example workbook is **only a compatibility
+reference**, not a canonical dataset or a supported bundled template.
+
+## Known limitations / unfinished acceptance criteria
+
+- Standards are licensed material: the repository seed currently initializes
+  generic ISO 27001 section groups rather than a complete authoritative
+  2022 requirement/control catalog or 93 editorially prepared questions.
+  **Do not claim 100% ISO 27001 coverage until the organization loads and
+  validates its licensed standard catalog.**
+- Template administration offers a **header/code-based mapping suggestion** and
+  a manual cell-mapping editor. It is not a universal workbook parser; formulas,
+  nonstandard table layouts, and dynamic row expansion still require UAT.
+  Final GAP Analysis exports require both status and notes/evidence mappings
+  for all bank criteria. Generic custom reports may export subsets.
+- **Import catalog XLSX** in Standard administration (with a source-license
+  declaration). ISO 27001-specific code normalization handles legacy `5.1k`
+  clause and `5.1` Annex control labels, while non-ISO standards retain
+  their own code syntax. The import never initializes an example organization's
+  data, requires privileges, and does not overwrite existing catalog entries.
+  Published or actively assessed catalog editions cannot be mutated.
+- **Evidence Pack ZIP** contains a manifest, per-evidence SHA-256 and copies
+  of currently accepted active/verified evidence. Confidential/restricted
+  (and unknown-classification) evidence is excluded by default, with a separate
+  sensitive-export permission. Export records and checksums are retained.
+- Multiple answers across different objects can be included in one human
+  consolidation using the cross-context option; later answers invalidate prior
+  active consolidations without discarding the raw evidence.
+- Risk approval strength is at least the score of linked open Risk Register
+  entries; decisions must be re-reviewed if their linked risk subsequently rises.
+- Assets and activities now have a per-assessment register, but automatic
+  extraction from interviews, risk discovery, recurring assessments, advanced
+  conflict-resolution UX, per-role dashboard polish and full multi-tenant
+  infrastructure need follow-up work.
+- Role membership and evidence security need penetration/UAT testing in the
+  actual hosting environment. CI passing is necessary, not sufficient.
+- The example XLSX was inspected read-only: 30 clause items, 93 Annex A
+  controls, 18 prefilled risk scenarios, 24 prefilled asset descriptions,
+  12 prefilled activities, 3 chart XML parts and Excel extended validations.
+  Its organization-specific values are not copied into the application.
+  CI tests structural export with generic workbooks, but Microsoft Excel
+  desktop UAT of real complex formulas, charts and validation extensions
+  is still required.
+
+## Release guardrails
+
+- No existing ISO-KM table is dropped or rewritten. Historical migration index
+  naming and reminder key sizes were adjusted for clean MySQL installations;
+  review migration history before deploying to an existing database.
+- No automatic merge or deployment while the PR is draft.
+- Run `php artisan migrate`, then seed reviewed permissions and load the
+  intended licensed standard catalog/question bank.
+- Run `php artisan test`; verify existing document, evidence, risk, supplier,
+  audit, and assurance regressions.
+- Perform end-to-end browser review for all roles, verify permissions server-side,
+  and open exported files in Excel to confirm chart/validation fidelity.

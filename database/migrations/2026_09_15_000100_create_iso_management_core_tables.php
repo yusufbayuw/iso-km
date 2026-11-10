@@ -90,7 +90,7 @@ return new class extends Migration
             $table->timestamp('last_assessed_at')->nullable();
             $table->date('next_review_at')->nullable();
             $table->timestamps();
-            $table->unique(['management_system_id', 'requirement_id']);
+            $table->unique(['management_system_id', 'requirement_id'], 'req_assessment_system_req_unique');
         });
 
         Schema::create('soa_entries', function (Blueprint $table) {
@@ -142,7 +142,7 @@ return new class extends Migration
         Schema::create('document_management_system', function (Blueprint $table) {
             $table->foreignId('document_id')->constrained()->cascadeOnDelete();
             $table->foreignId('management_system_id')->constrained()->cascadeOnDelete();
-            $table->primary(['document_id', 'management_system_id']);
+            $table->primary(['document_id', 'management_system_id'], 'document_ms_primary');
         });
 
         Schema::create('document_requirement', function (Blueprint $table) {

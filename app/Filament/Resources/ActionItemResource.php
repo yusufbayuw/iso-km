@@ -24,6 +24,10 @@ class ActionItemResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery()->with(['owner', 'managementSystem']);
+        if (! config('iso-km.guided_assessment_enabled', false)) {
+            // Preserve existing guided tasks, but do not expose them while disabled.
+            $query->whereNotIn('category', ['guided_interview', 'guided_evidence_review', 'guided_review']);
+        }
         $user = auth()->user();
         if (! $user?->can('action_item.view_all')) {
             $query->where('owner_id', $user?->id);
@@ -68,8 +72,11 @@ class ActionItemResource extends Resource
 
     private static function categoryOptions(): array
     {
-        return [
+        $options = [
             'manual' => 'Manual',
+            'guided_interview' => 'Wawancara ISO',
+            'guided_evidence_review' => 'Review Bukti Asesmen',
+            'guided_review' => 'Persetujuan Asesmen',
             'evidence_collection' => 'Evidence',
             'document_review' => 'Review Dokumen',
             'document_acknowledgement' => 'Acknowledgement Dokumen',
@@ -91,6 +98,10 @@ class ActionItemResource extends Resource
             'supplier_assessment' => 'Supplier Reassessment',
             'supplier_treatment' => 'Supplier Treatment',
         ];
+        if (! config('iso-km.guided_assessment_enabled', false)) {
+            unset($options['guided_interview'], $options['guided_evidence_review'], $options['guided_review']);
+        }
+        return $options;
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageActionItems::route('/')]; }

@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\StandardResource\Pages;
 use App\Models\Standard;
+use App\Services\GuidedStandardCatalogImportService;
+use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -39,7 +41,33 @@ class StandardResource extends Resource
             Tables\Columns\TextColumn::make('requirements_count')->label('Requirement')->counts('requirements')->alignRight(),
             Tables\Columns\TextColumn::make('controls_count')->label('Control')->counts('controls')->alignRight(),
             Tables\Columns\IconColumn::make('is_active')->label('Aktif')->boolean(),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([
+            Tables\Actions\Action::make('import_catalog')->label('Impor Katalog XLSX')->icon('heroicon-o-arrow-up-tray')
+                ->visible(fn (Standard $record) => config('iso-km.guided_assessment_enabled', false)
+                    && (auth()->user()?->can('guided.bank.manage') ?? false)
+                    && (auth()->user()?->can('update_standard') ?? false))
+                ->form([
+                    Forms\Components\FileUpload::make('file')->label('XLSX Katalog Standar')->required()
+                        ->disk('local')->directory('iso/guided/catalog-imports')->visibility('private')
+                        ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->maxSize(20480)
+                        ->helperText('Sheet klausul dan kontrol harus memiliki kolom Kode dan Judul. Katalog harus merupakan sumber yang sah dan tidak memuat data organisasi contoh.'),
+                    Forms\Components\Checkbox::make('include_descriptions')->label('Impor juga uraian persyaratan/kontrol (opsional)')
+                        ->helperText('Default hanya kode dan judul agar uraian khusus organisasi tidak tercampur.'),
+                    Forms\Components\Checkbox::make('license_confirmed')->label('Saya berwenang menggunakan sumber katalog ini')->required()
+                        ->rules(['accepted']),
+                ])->action(function (Standard $record, array $data): void {
+                    if (empty($data['license_confirmed'])) {
+                        throw \Illuminate\Validation\ValidationException::withMessages(['catalog' => 'Konfirmasi hak penggunaan katalog wajib diberikan.']);
+                    }
+                    $result = app(GuidedStandardCatalogImportService::class)->import(
+                        $record, $data['file'], auth()->user(), (bool) ($data['include_descriptions'] ?? false)
+                    );
+                    Notification::make()->success()->title('Impor katalog selesai')->body(
+                        $result['inserted']['requirements'].' klausul dan '.$result['inserted']['controls'].' kontrol baru ditambahkan; item lama tidak ditimpa.'
+                    )->send();
+                }),
+            Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make(),
+        ]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageStandards::route('/')]; }
