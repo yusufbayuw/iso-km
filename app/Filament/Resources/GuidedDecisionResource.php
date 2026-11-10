@@ -23,7 +23,7 @@ class GuidedDecisionResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->canAny(['guided.assessment.review', 'guided.evidence.review', 'guided.risk.approve', 'guided.management.approve', 'guided.assessment.manage']) ?? false;
+        return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->canAny(['guided.assessment.review', 'guided.evidence.review', 'guided.risk.approve', 'guided.management.approve', 'guided.assessment.manage']) ?? false);
     }
 
     public static function canCreate(): bool { return false; }
