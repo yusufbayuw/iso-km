@@ -18,6 +18,7 @@ class GuidedWorkbookContextMappingService
         $mappings = [];
         $capacities = ['risk_index' => 0, 'asset_index' => 0, 'activity_index' => 0];
         $warnings = [];
+        $prefilledOrganization = null;
         foreach ($parts as $name => $part) {
             $xml = $zip->getFromName($part);
             if (! is_string($xml) || strlen($xml) > 20_000_000) { continue; }
@@ -48,8 +49,13 @@ class GuidedWorkbookContextMappingService
                         default => null,
                     };
                     if ($field) {
+                        $valueColumn = $this->offsetColumn($column, 2);
+                        if ($field === 'organization_name') {
+                            $candidate = trim((string) ($values[$valueColumn] ?? ''));
+                            if ($candidate !== '') { $prefilledOrganization = $candidate; }
+                        }
                         $mappings[] = ['sheet' => $name,
-                            'cell' => $this->offsetColumn($column, 2).$number,
+                            'cell' => $valueColumn.$number,
                             'source' => 'assessment', 'field' => $field, 'required' => false];
                     }
                 }
@@ -118,7 +124,9 @@ class GuidedWorkbookContextMappingService
                 }
             }
         }
-        return ['mappings' => $mappings, 'capacities' => $capacities, 'warnings' => $warnings];
+        return ['mappings' => $mappings, 'capacities' => $capacities,
+            'prefilled_organization' => $prefilledOrganization,
+            'warnings' => $warnings];
     }
 
     private function cells(DOMElement $row, array $shared): array
