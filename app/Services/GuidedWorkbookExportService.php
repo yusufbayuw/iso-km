@@ -38,6 +38,9 @@ class GuidedWorkbookExportService
         if (! $template->mappings || count($template->mappings) > 10000) {
             throw ValidationException::withMessages(['mappings' => 'Template harus memiliki pemetaan yang valid.']);
         }
+        if ($final && $template->report_type === 'gap_analysis') {
+            $this->assertCompleteGapMapping($run, $template->mappings);
+        }
         $src = Storage::disk('local')->path($template->file_path);
         if (! is_file($src) || strtolower(pathinfo($src, PATHINFO_EXTENSION)) !== 'xlsx') {
             throw ValidationException::withMessages(['template' => 'File template XLSX tidak tersedia.']);
@@ -74,6 +77,7 @@ class GuidedWorkbookExportService
             throw ValidationException::withMessages(['template' => 'XLSX tidak dapat dibuka.']);
         }
         try {
+            $this->validatePackage($zip);
             $sheets = $this->sheetPaths($zip);
             $decisions = $this->decisionsByTarget($run);
             $bySheet = [];
@@ -100,7 +104,7 @@ class GuidedWorkbookExportService
                 foreach ($cells as $cellRef => $value) {
                     $cell = $xpath->query('//x:c[@r="'.$cellRef.'"]')->item(0);
                     if (! $cell instanceof DOMElement) {
-                        throw ValidationException::withMessages(['mapping' => 'Sel '.$sheetName.'!'.$cellRef.' tidak ada dalam template.']);
+                        $cell = $this->createBlankInputCell($document, $xpath, $cellRef, $sheetName);
                     }
                     if ($cell->getElementsByTagNameNS(self::SHEET_NS, 'f')->length > 0) {
                         throw ValidationException::withMessages(['mapping' => 'Sel formula '.$sheetName.'!'.$cellRef.' tidak boleh ditimpa.']);
@@ -125,9 +129,101 @@ class GuidedWorkbookExportService
                 }
                 $zip->addFromString($entry, $document->saveXML());
             }
+            $this->requestRecalculation($zip);
         } finally {
             $zip->close();
         }
+    }
+
+    private function assertCompleteGapMapping(GuidedAssessment $run, array $mappings): void
+    {
+        $provided = [];
+        foreach ($mappings as $mapping) {
+            $source = (string) ($mapping['source'] ?? '');
+            $code = (string) ($mapping['code'] ?? '');
+            if (in_array($source, ['control', 'requirement'], true) && $code !== '') {
+                $provided[$source.':'.$code][] = $mapping['field'] ?? '';
+            }
+        }
+        $questions = $run->bank->questions()->with(['targets.requirement', 'targets.control'])->get();
+        $missing = [];
+        foreach ($questions as $question) {
+            foreach ($question->targets as $target) {
+                $key = $target->control_id ? 'control:'.$target->control?->code : 'requirement:'.$target->requirement?->code;
+                $fields = $provided[$key] ?? [];
+                if (! in_array('status', $fields, true)
+                    || count(array_intersect($fields, ['notes_and_evidence', 'evidence_refs', 'summary', 'rationale'])) === 0) {
+                    $missing[] = $key;
+                }
+            }
+        }
+        if ($missing) {
+            throw ValidationException::withMessages(['mappings' => 'Pemetaan GAP Analysis belum mencakup status dan bukti/catatan untuk: '.implode(', ', array_slice(array_unique($missing), 0, 12))]);
+        }
+    }
+
+    private function validatePackage(ZipArchive $zip): void
+    {
+        if ($zip->numFiles > 2000) {
+            throw ValidationException::withMessages(['template' => 'Jumlah bagian workbook melebihi batas keamanan.']);
+        }
+        $expanded = 0;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = $zip->statIndex($i);
+            $name = (string) ($entry['name'] ?? '');
+            $expanded += (int) ($entry['size'] ?? 0);
+            if ($expanded > 150_000_000 || str_contains($name, '..') || str_contains($name, chr(92))
+                || str_starts_with($name, '/')
+                || preg_match('~(?:^|/)(?:vbaProject\\.bin|externalLinks|embeddings)(?:/|$)~i', $name)) {
+                throw ValidationException::withMessages(['template' => 'Workbook mengandung bagian tidak aman atau terlalu besar.']);
+            }
+        }
+    }
+
+    private function createBlankInputCell(DOMDocument $document, DOMXPath $xpath, string $reference, string $sheet): DOMElement
+    {
+        $rowNumber = (int) preg_replace('/^[A-Z]+/', '', $reference);
+        $row = $xpath->query('/x:worksheet/x:sheetData/x:row[@r="'.$rowNumber.'"]')->item(0);
+        if (! $row instanceof DOMElement) {
+            throw ValidationException::withMessages(['mapping' => 'Baris '.$sheet.'!'.$reference.' tidak tersedia dalam template.']);
+        }
+        $cell = $document->createElementNS(self::SHEET_NS, 'c');
+        $cell->setAttribute('r', $reference);
+        $columnNumber = $this->columnNumber($reference);
+        foreach ($row->childNodes as $existing) {
+            if ($existing instanceof DOMElement && $existing->localName === 'c'
+                && $this->columnNumber($existing->getAttribute('r')) > $columnNumber) {
+                $row->insertBefore($cell, $existing);
+                return $cell;
+            }
+        }
+        $row->appendChild($cell);
+        return $cell;
+    }
+
+    private function columnNumber(string $reference): int
+    {
+        $number = 0;
+        foreach (str_split(preg_replace('/[0-9]/', '', strtoupper($reference))) as $letter) {
+            $number = $number * 26 + ord($letter) - 64;
+        }
+        return $number;
+    }
+
+    private function requestRecalculation(ZipArchive $zip): void
+    {
+        $xml = $zip->getFromName('xl/workbook.xml');
+        if ($xml === false) { return; }
+        $document = $this->loadXml($xml);
+        $calc = $document->getElementsByTagNameNS(self::SHEET_NS, 'calcPr')->item(0);
+        if (! $calc instanceof DOMElement) {
+            $calc = $document->createElementNS(self::SHEET_NS, 'calcPr');
+            $document->documentElement->appendChild($calc);
+        }
+        $calc->setAttribute('calcMode', 'auto');
+        $calc->setAttribute('fullCalcOnLoad', '1');
+        $calc->setAttribute('forceFullCalc', '1');
+        $zip->addFromString('xl/workbook.xml', $document->saveXML());
     }
 
     private function loadXml(string $xml): DOMDocument
@@ -224,6 +320,9 @@ class GuidedWorkbookExportService
             'summary' => $decision->consolidation->summary,
             'risk_score' => $decision->risk_score,
             'evidence_refs' => $decision->acceptances->where('status', 'accepted')->map(fn ($a) => 'EVD-'.$a->evidence_id)->implode(', '),
+            'notes_and_evidence' => trim($decision->consolidation->summary.' | '.$decision->rationale
+                .' | Bukti: '.($decision->acceptances->where('status', 'accepted')->map(fn ($a) => 'EVD-'.$a->evidence_id)->implode(', ') ?: 'Tidak ada file; lihat rekaman penilaian')),
+            'na_justification' => $decision->proposed_status === 'not_applicable' ? $decision->rationale : null,
             'approved_at' => $decision->approved_at?->format('Y-m-d') ?? '',
             'applicable' => $decision->applicable === false ? 'Tidak' : 'Ya',
             default => throw ValidationException::withMessages(['mapping' => 'Field penilaian tidak dikenal.']),
