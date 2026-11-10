@@ -89,14 +89,7 @@ class GuidedAssessmentWorkflowService
                 ->where('context_key', $contextKey)->exists()) {
                 throw ValidationException::withMessages(['supersedes_id' => 'Revisi harus berasal dari jawaban sendiri dan konteks yang sama.']);
             }
-            $evidenceIds = array_values(array_unique(array_map('intval', $evidenceIds)));
-            if ($evidenceIds) {
-                $evidences = Evidence::query()->whereIn('id', $evidenceIds)
-                    ->where('management_system_id', $run->management_system_id)->get();
-                if ($evidences->count() !== count($evidenceIds) || ! $actor->can('view_any_evidence')) {
-                    throw ValidationException::withMessages(['evidence' => 'Evidence tidak dapat diakses dalam lingkup ini.']);
-                }
-            }
+            $evidenceIds = app(GuidedEvidenceAccessService::class)->assertSelectable($assignment, $actor, $evidenceIds);
             $answer = GuidedAnswer::query()->create([
                 'guided_assessment_id' => $run->id,
                 'guided_question_id' => $assignment->guided_question_id,
