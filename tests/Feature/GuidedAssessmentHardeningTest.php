@@ -11,6 +11,7 @@ use App\Models\GuidedQuestionBank;
 use App\Models\GuidedQuestionTarget;
 use App\Models\ManagementSystem;
 use App\Models\Requirement;
+use App\Models\Risk;
 use App\Models\Standard;
 use App\Models\User;
 use App\Services\GuidedAssessmentWorkflowService;
@@ -122,6 +123,34 @@ class GuidedAssessmentHardeningTest extends TestCase
         $this->assertDatabaseCount('guided_answers', 3);
         $this->expectException(ValidationException::class);
         $service->propose($consolidation, $target, $coordinator, 'partial', 3, 'Obsolete consolidation');
+    }
+
+    public function test_linked_risk_cannot_be_understated_or_approved_after_its_score_increases(): void
+    {
+        extract($this->fixture());
+        $service = app(GuidedAssessmentWorkflowService::class);
+        $riskOwner = $this->actor('Riskowner', ['guided.risk.approve']);
+        $assessor = $this->actor('Assessor', ['guided.assessment.review']);
+        $run->memberships()->create(['user_id' => $riskOwner->id, 'role' => 'risk_owner']);
+        $run->memberships()->create(['user_id' => $assessor->id, 'role' => 'assessor']);
+
+        $risk = Risk::create(['management_system_id' => $system->id, 'owner_id' => $riskOwner->id,
+            'code' => 'R001', 'title' => 'Important risk', 'likelihood' => 4, 'impact' => 4, 'status' => 'open']);
+        $risk->requirements()->attach($requirement);
+        $answer = $service->submitAnswer($assignment, $respondent, ['value' => 'no']);
+        $consolidation = $service->consolidate($run, $question, $coordinator, [$answer->id],
+            'Requirement is not implemented.', 'select');
+        $decision = $service->propose($consolidation, $target, $coordinator,
+            'nonconformant', 2, 'Observed gap.', $riskOwner->id);
+        $this->assertSame(16, $decision->risk_score);
+
+        $risk->update(['likelihood' => 5, 'impact' => 5]);
+        try {
+            $service->approve($decision, $assessor, 'Review completed.');
+            $this->fail('Approval cannot proceed using an obsolete risk score.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('risk', $exception->errors());
+        }
     }
 
     public function test_question_bank_rejects_multiple_active_criteria_for_same_target(): void
