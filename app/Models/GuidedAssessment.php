@@ -14,6 +14,14 @@ class GuidedAssessment extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (self $run): void {
+            if ($actor = auth()->user()) {
+                if (! $actor->can('guided.assessment.manage')) {
+                    throw ValidationException::withMessages(['authorization' => 'Tidak diizinkan membuat periode asesmen.']);
+                }
+                $run->created_by = $actor->id;
+            }
+        });
         static::saving(function (self $run): void {
             if ($run->exists && ($run->isDirty('management_system_id') || $run->isDirty('guided_question_bank_id') || $run->isDirty('created_by'))) {
                 throw ValidationException::withMessages(['assessment' => 'Identitas, bank dan pemilik periode tidak dapat diganti setelah dibuat.']);
