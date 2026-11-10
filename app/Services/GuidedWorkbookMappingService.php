@@ -21,9 +21,9 @@ class GuidedWorkbookMappingService
      * Suggests mappings from workbook headers and catalog codes, never from an
      * organization's identity. Ambiguous controls/clauses remain unmapped.
      */
-    public function suggest(GuidedExportTemplate $template): array
+    public function suggest(GuidedExportTemplate $template, ?int $standardIdOverride = null): array
     {
-        if (! $template->management_system_id) {
+        if (! $template->management_system_id && ! $standardIdOverride) {
             throw ValidationException::withMessages(['template' => 'Pilih sistem manajemen sebagai konteks deteksi pemetaan.']);
         }
         $path = app(GuidedWorkbookTemplateFileService::class)->path($template->file_path);
@@ -32,7 +32,7 @@ class GuidedWorkbookMappingService
             throw ValidationException::withMessages(['template' => 'Template XLSX tidak dapat dibuka.']);
         }
         try {
-            $standardId = $template->system->standard_id;
+            $standardId = $standardIdOverride ?: $template->system->standard_id;
             $requirements = Requirement::query()->where('standard_id', $standardId)->pluck('code')->all();
             $controls = Control::query()->where('standard_id', $standardId)->where('is_group', false)->pluck('code')->all();
             $strings = $this->sharedStrings($zip);
