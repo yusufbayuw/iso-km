@@ -24,6 +24,12 @@ class GuidedQuestionBankTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_starter_question_bank_is_generic_and_idempotent(): void
     {
         $standard = Standard::create(['code' => 'STANDARD-X', 'name' => 'Standard X', 'edition' => '1']);
