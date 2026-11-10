@@ -41,10 +41,7 @@ class GuidedWorkbookExportService
         if ($final && $template->report_type === 'gap_analysis') {
             $this->assertCompleteGapMapping($run, $template->mappings);
         }
-        $src = Storage::disk('local')->path($template->file_path);
-        if (! is_file($src) || strtolower(pathinfo($src, PATHINFO_EXTENSION)) !== 'xlsx') {
-            throw ValidationException::withMessages(['template' => 'File template XLSX tidak tersedia.']);
-        }
+        $src = app(GuidedWorkbookTemplateFileService::class)->path($template->file_path);
         $relative = 'iso/exports/assessment-'.$run->id.'-'.($final ? 'FINAL' : 'DRAFT').'-'.Str::random(12).'.xlsx';
         $dest = Storage::disk('local')->path($relative);
         File::ensureDirectoryExists(dirname($dest));
