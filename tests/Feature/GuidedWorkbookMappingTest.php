@@ -30,8 +30,8 @@ class GuidedWorkbookMappingTest extends TestCase
         Requirement::create(['standard_id' => $standard->id, 'code' => '5.1', 'title' => 'Requirement']);
         Control::create(['standard_id' => $standard->id, 'code' => 'A.5.1', 'title' => 'Control']);
 
-        $path = Storage::disk('local')->path('templates/anonymous.xlsx');
-        Storage::disk('local')->makeDirectory('templates');
+        $path = Storage::disk('local')->path('iso/guided/templates/anonymous.xlsx');
+        Storage::disk('local')->makeDirectory('iso/guided/templates');
         $zip = new ZipArchive();
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true);
         $zip->addFromString('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
@@ -52,7 +52,7 @@ class GuidedWorkbookMappingTest extends TestCase
         $zip->close();
         $template = GuidedExportTemplate::create([
             'management_system_id' => $system->id, 'name' => 'Generic',
-            'file_path' => 'templates/anonymous.xlsx', 'mappings' => [],
+            'file_path' => 'iso/guided/templates/anonymous.xlsx', 'mappings' => [],
         ]);
         $result = app(GuidedWorkbookMappingService::class)->suggest($template);
         $this->assertSame(2, $result['recognized_targets']);
