@@ -31,7 +31,13 @@ class GuidedAssessmentResource extends Resource
     protected static ?int $navigationSort = 1;
 
     public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.view') ?? false); }
-    public static function canCreate(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.manage') ?? false); }
+    public static function canCreate(): bool
+    {
+        return config('iso-km.guided_assessment_enabled', false)
+            && ($user = auth()->user()) !== null
+            && $user->can('guided.assessment.manage')
+            && app(GuidedSystemAccessService::class)->accessibleSystems($user)->exists();
+    }
     public static function canEdit($record): bool { return self::canCreate() && $record->isMember(auth()->user(), ['coordinator']) && ! $record->locked_at; }
     public static function canDelete($record): bool { return false; }
 
