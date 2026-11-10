@@ -68,7 +68,7 @@ class GuidedEvidencePackService
                     $manifest['omitted'][] = ['evidence_id' => $evidence->id, 'reason' => 'not_currently_verified'];
                     continue;
                 }
-                $isSensitive = in_array($evidence->confidentiality, ['confidential', 'restricted'], true);
+                $isSensitive = ! in_array($evidence->confidentiality, ['public', 'internal'], true);
                 if ($isSensitive && ! $includeSensitive) {
                     $manifest['omitted'][] = ['evidence_id' => $evidence->id, 'reason' => 'sensitive_permission_required'];
                     continue;
