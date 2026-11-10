@@ -57,8 +57,8 @@ class GuidedWorkbookExportTest extends TestCase
             'risk_score' => 3, 'status' => 'approved', 'synced_at' => now(), 'approved_at' => now(),
         ]);
 
-        Storage::disk('local')->makeDirectory('templates');
-        $path = Storage::disk('local')->path('templates/example.xlsx');
+        Storage::disk('local')->makeDirectory('iso/guided/templates');
+        $path = Storage::disk('local')->path('iso/guided/templates/example.xlsx');
         $zip = new ZipArchive();
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true);
         $zip->addFromString('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
@@ -70,7 +70,7 @@ class GuidedWorkbookExportTest extends TestCase
 
         $template = GuidedExportTemplate::create([
             'management_system_id' => $system->id, 'name' => 'Example',
-            'file_path' => 'templates/example.xlsx',
+            'file_path' => 'iso/guided/templates/example.xlsx',
             'report_type' => 'gap_analysis',
             'mappings' => [
                 ['sheet' => 'Sheet1', 'cell' => 'A1', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status', 'required' => true],
