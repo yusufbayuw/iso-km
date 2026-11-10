@@ -20,7 +20,7 @@ class GuidedQuestionBankResource extends Resource
     protected static ?string $navigationLabel = 'Bank Pertanyaan';
     protected static ?int $navigationSort = 20;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.bank.manage') ?? false; }
+    public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.bank.manage') ?? false); }
     public static function canCreate(): bool { return self::canViewAny(); }
     public static function canEdit($record): bool { return self::canViewAny() && $record->status === 'draft'; }
     public static function canDelete($record): bool { return self::canEdit($record) && ! $record->questions()->exists(); }
