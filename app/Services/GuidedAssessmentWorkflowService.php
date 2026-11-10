@@ -48,10 +48,17 @@ class GuidedAssessmentWorkflowService
             $this->assertMutable($run);
             $this->allow($run, $actor, 'guided.assessment.manage', ['coordinator']);
             $run->memberships()->firstOrCreate(['user_id' => $respondent->id, 'role' => 'respondent']);
-            return $run->assignments()->firstOrCreate(
+            $assigned = $run->assignments()->firstOrCreate(
                 ['guided_question_id' => $question->id, 'user_id' => $respondent->id],
-                ['status' => 'assigned', 'due_at' => $dueAt],
+                ['status' => 'assigned', 'due_at' => $dueAt, 'is_auto_assigned' => false],
             );
+            if ($assigned->is_auto_assigned) {
+                $assigned->update([
+                    'is_auto_assigned' => false,
+                    'status' => $assigned->status === 'skipped' ? 'assigned' : $assigned->status,
+                ]);
+            }
+            return $assigned;
         });
     }
 
@@ -67,6 +74,9 @@ class GuidedAssessmentWorkflowService
             }
             if (! $run->isMember($actor, ['respondent']) || $assignment->question->guided_question_bank_id !== $run->guided_question_bank_id) {
                 throw ValidationException::withMessages(['question' => 'Penugasan tidak valid.']);
+            }
+            if (! in_array($assignment->status, ['assigned', 'in_progress', 'submitted'], true)) {
+                throw ValidationException::withMessages(['assignment' => 'Pertanyaan lanjutan ini tidak aktif untuk jawaban terkini.']);
             }
             $question = $assignment->question;
             $value = $response['value'] ?? null;
@@ -397,7 +407,7 @@ class GuidedAssessmentWorkflowService
                 || $coverage['duplicate_targets']) {
                 throw ValidationException::withMessages(['coverage' => 'Bank pertanyaan belum memenuhi pemeriksaan cakupan.']);
             }
-            if ($run->assignments()->where('status', '!=', 'submitted')->exists() || ! $run->assignments()->exists()) {
+            if ($run->assignments()->whereNotIn('status', ['submitted', 'skipped'])->exists() || ! $run->assignments()->exists()) {
                 throw ValidationException::withMessages(['assessment' => 'Seluruh penugasan wajib diselesaikan sebelum finalisasi.']);
             }
             $activeDecisions = GuidedDecision::query()->whereHas('consolidation', fn ($q) =>
