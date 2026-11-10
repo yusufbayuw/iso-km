@@ -37,6 +37,8 @@ class IsoRolePermissionSeeder extends Seeder
 
         $allPermissions = array_values(array_unique(array_merge($workflowPermissions, ...array_values($crudByEntity))));
         foreach ($allPermissions as $permission) { Permission::findOrCreate($permission, 'web'); }
+        // Sensitive evidence-pack export is deliberately NOT part of ordinary coordinator roles.
+        Permission::findOrCreate('guided.evidence_pack.export_sensitive', 'web');
 
         $templates = [
             'iso_manager' => $allPermissions,
@@ -95,7 +97,7 @@ class IsoRolePermissionSeeder extends Seeder
             }
         }
 
-        Role::findOrCreate('super_admin', 'web')->givePermissionTo($allPermissions);
+        Role::findOrCreate('super_admin', 'web')->givePermissionTo(array_merge($allPermissions, ['guided.evidence_pack.export_sensitive']));
     }
 
     private function crudPermissions(string $entity): array
