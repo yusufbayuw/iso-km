@@ -40,7 +40,9 @@ class GuidedStandardCatalogImportService
             throw ValidationException::withMessages(['catalog' => 'File XLSX tidak dapat dibuka.']);
         }
         try {
-            $rows = $this->rows($zip);
+            $isIso27001 = strtoupper(trim($standard->code)) === 'ISO/IEC 27001'
+                && str_starts_with((string) $standard->edition, '2022');
+            $rows = $this->rows($zip, $isIso27001);
         } finally {
             $zip->close();
         }
@@ -105,7 +107,7 @@ class GuidedStandardCatalogImportService
         return $file;
     }
 
-    private function rows(ZipArchive $zip): array
+    private function rows(ZipArchive $zip, bool $isIso27001): array
     {
         $workbook = $zip->getFromName('xl/workbook.xml');
         $relations = $zip->getFromName('xl/_rels/workbook.xml.rels');
@@ -165,9 +167,13 @@ class GuidedStandardCatalogImportService
                 $code = trim((string) ($cells[$codeColumn] ?? ''));
                 $title = trim((string) ($cells[$titleColumn] ?? ''));
                 if ($code === '' || $title === '') { continue; }
-                $code = $kind === 'requirements'
-                    ? preg_replace('/k$/i', '', $code)
-                    : (str_starts_with(strtoupper($code), 'A.') ? strtoupper($code) : 'A.'.$code);
+                // Legacy example-workbook suffix/prefix are ISO-specific; other
+                // standards preserve their canonical codes without rewriting.
+                if ($isIso27001 && $kind === 'requirements') {
+                    $code = preg_replace('/k$/i', '', $code);
+                } elseif ($isIso27001 && $kind === 'controls') {
+                    $code = str_starts_with(strtoupper($code), 'A.') ? strtoupper($code) : 'A.'.$code;
+                }
                 if (! preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/', $code)) {
                     continue;
                 }
