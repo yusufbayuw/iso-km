@@ -47,11 +47,12 @@ class GuidedFeatureScopeTest extends TestCase
             'code' => 'OTH', 'name' => 'Other system',
         ]);
         $bank = GuidedQuestionBank::create([
-            'standard_id' => $standard->id, 'code' => 'BANK', 'name' => 'Bank', 'status' => 'published',
+            'standard_id' => $standard->id, 'code' => 'BANK', 'name' => 'Bank',
         ]);
         $question = GuidedQuestion::create([
             'guided_question_bank_id' => $bank->id, 'code' => 'Q1', 'prompt' => 'Evidence?', 'answer_options' => ['yes', 'no'],
         ]);
+        $bank->update(['status' => 'published']);
         return compact('owned', 'foreign', 'bank', 'question');
     }
 
