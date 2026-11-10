@@ -32,6 +32,7 @@ class GuidedWorkbookExportService
 
     public function export(GuidedAssessment $run, GuidedExportTemplate $template, User $actor, bool $final = true): string
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $actor->can('guided.report.export') || ! $run->isMember($actor, ['coordinator'])
             || ! $template->is_active || ($template->management_system_id && $template->management_system_id !== $run->management_system_id)) {
             throw ValidationException::withMessages(['authorization' => 'Template atau ekspor tidak tersedia untuk asesmen ini.']);
