@@ -29,6 +29,12 @@ class GuidedWorkbookContextExportTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     private function cell(string $address, string $value): string
     {
         return '<c r="'.$address.'" t="inlineStr"><is><t>'.htmlspecialchars($value, ENT_XML1).'</t></is></c>';
