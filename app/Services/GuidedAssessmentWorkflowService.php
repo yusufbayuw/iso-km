@@ -336,7 +336,10 @@ class GuidedAssessmentWorkflowService
             $this->assertMutable($run);
             $bank = $run->bank;
             $coverage = app(GuidedQuestionBankService::class)->coverage($bank);
-            if ($bank->status !== 'published' || $coverage['missing_requirements'] || $coverage['missing_controls'] || $coverage['broken_branches'] || $coverage['invalid_questions']) {
+            if ($bank->status !== 'published' || $coverage['missing_requirements'] || $coverage['missing_controls']
+                || $coverage['broken_branches'] || $coverage['invalid_questions']
+                || $coverage['catalog_missing_requirements'] || $coverage['catalog_missing_controls']
+                || $coverage['duplicate_targets']) {
                 throw ValidationException::withMessages(['coverage' => 'Bank pertanyaan belum memenuhi pemeriksaan cakupan.']);
             }
             if ($run->assignments()->where('status', '!=', 'submitted')->exists() || ! $run->assignments()->exists()) {
