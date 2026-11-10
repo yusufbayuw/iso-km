@@ -7,6 +7,7 @@ use App\Models\GuidedAssessment;
 use App\Models\GuidedExportTemplate;
 use App\Services\GuidedWorkbookExportService;
 use App\Services\GuidedQuestionBranchingService;
+use App\Services\GuidedEvidencePackService;
 use Illuminate\Support\Facades\Storage;
 use App\Models\GuidedQuestion;
 use App\Models\User;
@@ -79,6 +80,19 @@ class GuidedAssessmentResource extends Resource
                         $record, User::findOrFail($data['user_id']), auth()->user()
                     );
                     Notification::make()->success()->title($count.' pertanyaan awal ditugaskan')->send();
+                }),
+            Tables\Actions\Action::make('evidence_pack')->label('Evidence Pack ZIP')->icon('heroicon-o-archive-box-arrow-down')
+                ->visible(fn (GuidedAssessment $record) => $record->status === 'locked'
+                    && $record->isMember(auth()->user(), ['coordinator'])
+                    && (auth()->user()?->can('guided.report.export') ?? false))
+                ->form([
+                    Forms\Components\Toggle::make('include_sensitive')->label('Sertakan evidence rahasia/terbatas')
+                        ->default(false)->visible(fn () => auth()->user()?->can('guided.evidence_pack.export_sensitive') ?? false)
+                        ->helperText('Default aman: dokumen rahasia tidak ikut paket. Kewenangan tambahan wajib.')
+                ])->action(function (GuidedAssessment $record, array $data) {
+                    $path = app(GuidedEvidencePackService::class)->export($record, auth()->user(),
+                        (bool) ($data['include_sensitive'] ?? false));
+                    return response()->download(Storage::disk('local')->path($path), 'Evidence-Pack-'.$record->id.'.zip');
                 }),
             Tables\Actions\Action::make('export')->label('Unduh XLSX')->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn (GuidedAssessment $record) => $record->isMember(auth()->user(), ['coordinator'])
