@@ -10,6 +10,8 @@ use App\Services\GuidedQuestionBranchingService;
 use App\Services\GuidedEvidencePackService;
 use Illuminate\Support\Facades\Storage;
 use App\Models\GuidedQuestion;
+use App\Models\ManagementSystem;
+use App\Services\GuidedSystemAccessService;
 use App\Models\User;
 use App\Services\GuidedAssessmentWorkflowService;
 use Filament\Forms;
@@ -28,8 +30,8 @@ class GuidedAssessmentResource extends Resource
     protected static ?string $navigationLabel = 'Periode Asesmen';
     protected static ?int $navigationSort = 1;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.assessment.view') ?? false; }
-    public static function canCreate(): bool { return auth()->user()?->can('guided.assessment.manage') ?? false; }
+    public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.view') ?? false); }
+    public static function canCreate(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.manage') ?? false); }
     public static function canEdit($record): bool { return self::canCreate() && $record->isMember(auth()->user(), ['coordinator']) && ! $record->locked_at; }
     public static function canDelete($record): bool { return false; }
 
@@ -41,9 +43,19 @@ class GuidedAssessmentResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('system', 'name')->required()->searchable()->preload()->disabledOn('edit'),
-            Forms\Components\Select::make('guided_question_bank_id')->label('Bank Pertanyaan')->relationship('bank', 'name', modifyQueryUsing: fn ($q) => $q->where('status', 'published'))->required()->searchable()->preload()->disabledOn('edit')
-                ->helperText('Pilih bank pertanyaan terbit dengan standar yang sama.'),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')
+                ->relationship('system', 'name', modifyQueryUsing: fn (Builder $query) => $query
+                    ->whereIn('id', app(GuidedSystemAccessService::class)
+                        ->accessibleSystems(auth()->user())->select('id')))
+                ->required()->searchable()->preload()->live()->disabledOn('edit')
+                ->helperText('Hanya sistem milik lingkup yang dikelola atau sudah ditugaskan kepada Anda.'),
+            Forms\Components\Select::make('guided_question_bank_id')->label('Bank Pertanyaan')
+                ->relationship('bank', 'name', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                    ->where('status', 'published')
+                    ->where('standard_id', ManagementSystem::query()
+                        ->whereKey($get('management_system_id'))->value('standard_id') ?? -1))
+                ->required()->searchable()->preload()->disabledOn('edit')
+                ->helperText('Hanya bank terbit untuk standar sistem manajemen yang dipilih.'),
             Forms\Components\TextInput::make('name')->label('Nama Asesmen')->required()->columnSpanFull(),
             Forms\Components\TextInput::make('high_risk_threshold')->label('Ambang Risiko Tinggi')->numeric()->minValue(1)->maxValue(25)->default(12)->required(),
             Forms\Components\TextInput::make('critical_risk_threshold')->label('Ambang Risiko Kritis')->numeric()->minValue(1)->maxValue(25)->default(20)->required(),
