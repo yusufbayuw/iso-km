@@ -223,6 +223,19 @@ class GuidedWorkbookExportService
                     'Jumlah data '.$type.' ('.$count.') melebihi kapasitas template ('.$capacity.'). Perlu template lebih luas sebelum ekspor.']);
             }
         }
+        // An ordinary GAP template often exposes only three linked controls
+        // per risk. Never silently truncate a fourth or subsequent control.
+        $riskControlColumns = collect($detected['mappings'])
+            ->where('source', 'risk_index')->pluck('field')->unique()
+            ->intersect(['control_1', 'control_2', 'control_3'])->count();
+        $overflow = Risk::query()->where('management_system_id', $run->management_system_id)
+            ->withCount('controls')->get()
+            ->first(fn (Risk $risk) => $risk->controls_count > $riskControlColumns);
+        if ($overflow) {
+            throw ValidationException::withMessages(['template' =>
+                'Risiko '.$overflow->code.' memiliki '.$overflow->controls_count.' kontrol, tetapi template hanya menyediakan '.
+                $riskControlColumns.' kolom. Gunakan template dengan kapasitas memadai.']);
+        }
     }
 
     private function validatePackage(ZipArchive $zip): void
