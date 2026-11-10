@@ -26,6 +26,12 @@ class GuidedWorkbookExportTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_mapped_input_cells_are_updated_without_overwriting_formulas_or_charts(): void
     {
         Storage::fake('local');
