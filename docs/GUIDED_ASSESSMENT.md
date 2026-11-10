@@ -22,6 +22,63 @@ hard-isolated multi-tenant branding or data segregation. Management-system
 membership controls Guided Assessment data access. A multi-tenant hosting
 architecture would require its own tenancy and isolation review.
 
+## Safe merge, access policy, and activation
+
+The feature flag defaults to **off** in all installations. Merging this PR does
+not activate the Guided Assessment workflow:
+
+```dotenv
+ISO_KM_GUIDED_ASSESSMENT_ENABLED=false
+```
+
+When off, all new Filament resources deny navigation/requests, their workflow
+services refuse operations, catalog import is hidden/blocked, and generated
+Guided Assessment tasks are neither projected nor silently closed by
+`My Work`. Existing ISO-KM modules continue to operate.
+
+**Management-system access** is deliberately narrower than a global CRUD
+permission:
+
+- A user with `guided.assessment.manage` can create an assessment only when
+  they own its `ComplianceScope` or are already an assigned coordinator of
+  an assessment in that same system.
+- `guided.system.manage_all` grants all-system administration. It is granted
+  to the `super_admin` role in the permission seeder, not ordinary ISO
+  coordinators. It can also be granted explicitly where operationally approved.
+- Only authorized systems appear in the assessment and template selectors.
+  The assessment model and template model repeat the check server-side.
+- A template may have no system (global) only when the editor has
+  `guided.template.manage_global`. A coordinator with only
+  `guided.template.manage` sees and edits only templates in authorized
+  systems. Global templates remain reusable for authorized assessment exports,
+  not globally editable.
+
+The feature adds a second MySQL 8.0 CI job beside SQLite. The MySQL job
+migrates a blank database and runs the full test suite, including an assertion
+that the connection is genuinely MySQL. A few historical **migration index
+names/column lengths** were corrected for MySQL's 64-character identifier and
+utf8mb4 composite-key limits. Existing databases with these migrations already
+applied are not rewritten by `migrate`.
+
+Deployment sequence after CI and review:
+
+1. Backup the database and deploy code with the flag **off**.
+2. Run `php artisan migrate --force` against the target installation.
+3. Review and run `php artisan db:seed --class=IsoRolePermissionSeeder`.
+   Existing role customizations are preserved; the new global powers are
+   privileged separately.
+4. Assign a manager to each relevant Compliance Scope (or authorized
+   coordinator of an existing assessment), configure the catalog and question
+   banks, and confirm role separation.
+5. Complete per-role browser UAT, evidence access testing, and desktop Excel
+   verification.
+6. Set `ISO_KM_GUIDED_ASSESSMENT_ENABLED=true` and refresh the cached
+   configuration (`php artisan config:cache`) **only after** the operational
+   checks are accepted.
+
+This approach allows **merge-ready but dormant** code to enter `main`
+without representing the module as production-ready.
+
 ## Human-led workflow
 
 1. The bank editor creates a versioned bank, questions, choices, conditional
@@ -193,7 +250,9 @@ reference**, not a canonical dataset or a supported bundled template.
 
 ## Release guardrails
 
-- Additive migrations only; no existing ISO-KM table dropped or rewritten.
+- No existing ISO-KM table is dropped or rewritten. Historical migration index
+  naming and reminder key sizes were adjusted for clean MySQL installations;
+  review migration history before deploying to an existing database.
 - No automatic merge or deployment while the PR is draft.
 - Run `php artisan migrate`, then seed reviewed permissions and load the
   intended licensed standard catalog/question bank.
