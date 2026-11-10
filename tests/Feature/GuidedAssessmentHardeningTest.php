@@ -27,6 +27,12 @@ class GuidedAssessmentHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     private function actor(string $name, array $permissions = []): User
     {
         $user = User::create(['name' => $name, 'email' => strtolower($name).'@example.test', 'password' => 'password']);
