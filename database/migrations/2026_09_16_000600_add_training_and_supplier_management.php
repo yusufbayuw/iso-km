@@ -30,7 +30,7 @@ return new class extends Migration
         Schema::create('requirement_training_program', function (Blueprint $table): void {
             $table->foreignId('requirement_id')->constrained()->cascadeOnDelete();
             $table->foreignId('training_program_id')->constrained()->cascadeOnDelete();
-            $table->primary(['requirement_id', 'training_program_id']);
+            $table->primary(['requirement_id', 'training_program_id'], 'req_training_program_pk');
         });
 
         Schema::create('control_training_program', function (Blueprint $table): void {
@@ -104,7 +104,7 @@ return new class extends Migration
         Schema::create('management_system_supplier', function (Blueprint $table): void {
             $table->foreignId('management_system_id')->constrained()->cascadeOnDelete();
             $table->foreignId('supplier_id')->constrained()->cascadeOnDelete();
-            $table->primary(['management_system_id', 'supplier_id']);
+            $table->primary(['management_system_id', 'supplier_id'], 'ms_supplier_pk');
         });
 
         Schema::create('requirement_supplier', function (Blueprint $table): void {
