@@ -14,6 +14,7 @@ use App\Models\GuidedEvidenceAcceptance;
 use App\Models\GuidedQuestion;
 use App\Models\GuidedQuestionTarget;
 use App\Models\RequirementAssessment;
+use App\Models\Risk;
 use App\Models\StatementOfApplicability;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -170,8 +171,20 @@ class GuidedAssessmentWorkflowService
         if (! in_array($status, $allowed, true) || ($target->control_id && ($status === 'not_applicable') !== ($applicable === false))) {
             throw ValidationException::withMessages(['status' => 'Status tidak sesuai jenis target atau applicability.']);
         }
-        if ($riskScore >= $run->high_risk_threshold && ! $riskOwnerId) {
-            throw ValidationException::withMessages(['risk_owner_id' => 'Pemilik risiko wajib ditentukan untuk risiko tinggi.']);
+        $linkedRisks = $this->linkedRisks($target, $run);
+        $highestLinkedScore = $linkedRisks->max(fn (Risk $risk) =>
+            (int) ($risk->residual_score ?? $risk->inherent_score)) ?? 0;
+        $riskScore = max($riskScore, $highestLinkedScore);
+        if ($riskScore >= $run->high_risk_threshold) {
+            if (! $riskOwnerId || ! $run->memberships()->where('user_id', $riskOwnerId)->where('role', 'risk_owner')->exists()) {
+                throw ValidationException::withMessages(['risk_owner_id' => 'Risiko tinggi memerlukan pemilik risiko terdaftar pada asesmen.']);
+            }
+            $highRiskOwners = $linkedRisks->filter(fn (Risk $risk) =>
+                (int) ($risk->residual_score ?? $risk->inherent_score) >= $run->high_risk_threshold)
+                ->pluck('owner_id')->filter()->unique()->all();
+            if ($highRiskOwners && ! in_array($riskOwnerId, $highRiskOwners, true)) {
+                throw ValidationException::withMessages(['risk_owner_id' => 'Persetujuan harus dilakukan oleh pemilik risiko terkait.']);
+            }
         }
         $competing = GuidedDecision::query()->where('guided_question_target_id', $target->id)
             ->where('guided_consolidation_id', '!=', $consolidation->id)
@@ -190,6 +203,26 @@ class GuidedAssessmentWorkflowService
              'risk_score' => $riskScore, 'risk_owner_id' => $riskOwnerId,
              'baseline_status' => $baselineStatus, 'baseline_updated_at' => $source?->updated_at],
         );
+    }
+
+    private function linkedRisks(GuidedQuestionTarget $target, GuidedAssessment $run)
+    {
+        return Risk::query()->where('management_system_id', $run->management_system_id)
+            ->where('status', '!=', 'closed')
+            ->whereHas($target->control_id ? 'controls' : 'requirements', fn ($query) =>
+                $target->control_id
+                    ? $query->where('controls.id', $target->control_id)
+                    : $query->where('requirements.id', $target->requirement_id))
+            ->get();
+    }
+
+    private function assertRiskCurrent(GuidedDecision $decision, GuidedAssessment $run): void
+    {
+        $maximum = $this->linkedRisks($decision->target, $run)->max(fn (Risk $risk) =>
+            (int) ($risk->residual_score ?? $risk->inherent_score)) ?? 0;
+        if ($maximum > $decision->risk_score) {
+            throw ValidationException::withMessages(['risk' => 'Risiko terhubung meningkat; buat penilaian baru dan ulangi persetujuan.']);
+        }
     }
 
     public function acceptEvidence(GuidedDecision $decision, Evidence $evidence, User $actor, bool $accepted, string $reason): GuidedEvidenceAcceptance
@@ -229,6 +262,7 @@ class GuidedAssessmentWorkflowService
                 throw ValidationException::withMessages(['decision' => 'Keputusan tidak dapat disetujui pada status ini.']);
             }
             if (trim($notes) === '') { throw ValidationException::withMessages(['notes' => 'Alasan persetujuan/penolakan wajib diisi.']); }
+            $this->assertRiskCurrent($decision, $run);
             $stage = $this->nextStage($decision, $run);
             if ($stage === null) { throw ValidationException::withMessages(['decision' => 'Semua tahapan telah disetujui.']); }
             $permission = match ($stage) {
@@ -287,6 +321,7 @@ class GuidedAssessmentWorkflowService
             if ($decision->status !== 'approved' || ! $decision->consolidation->is_current) {
                 throw ValidationException::withMessages(['decision' => 'Hanya keputusan current yang disetujui dapat dipublikasikan.']);
             }
+            $this->assertRiskCurrent($decision, $run);
             if (in_array($decision->proposed_status, ['conformant', 'implemented', 'partial', 'in_progress', 'planned'], true)
                 && ! $decision->acceptances()->where('status', 'accepted')->whereHas('evidence', fn ($q) =>
                     $q->where('status', 'active')->where('verification_status', 'verified')
@@ -345,6 +380,9 @@ class GuidedAssessmentWorkflowService
             if ($run->assignments()->where('status', '!=', 'submitted')->exists() || ! $run->assignments()->exists()) {
                 throw ValidationException::withMessages(['assessment' => 'Seluruh penugasan wajib diselesaikan sebelum finalisasi.']);
             }
+            $activeDecisions = GuidedDecision::query()->whereHas('consolidation', fn ($q) =>
+                $q->where('guided_assessment_id', $run->id)->where('is_current', true))->with('target')->get();
+            foreach ($activeDecisions as $decision) { $this->assertRiskCurrent($decision, $run); }
             $expectedTargets = GuidedQuestionTarget::query()->whereHas('question',
                 fn ($q) => $q->where('guided_question_bank_id', $bank->id))->pluck('id');
             $decisions = GuidedDecision::query()->whereHas('consolidation',
