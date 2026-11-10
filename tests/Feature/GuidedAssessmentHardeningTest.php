@@ -66,6 +66,8 @@ class GuidedAssessmentHardeningTest extends TestCase
         GuidedQuestionTarget::create(['guided_question_id' => $q->id, 'requirement_id' => $r->id, 'criterion' => 'Context established']);
         $coverage = app(GuidedQuestionBankService::class)->coverage($bank);
         $this->assertCount(93, $coverage['catalog_missing_controls']);
+        $this->assertCount(30, $coverage['catalog_missing_requirements']);
+        $this->assertSame(0, $coverage['requirements_total'], 'Clause headings are not assessable subclauses.');
         $this->assertContains('4.1', $coverage['catalog_missing_requirements']);
         $this->expectException(ValidationException::class);
         app(GuidedQuestionBankService::class)->publish($bank, $actor);
