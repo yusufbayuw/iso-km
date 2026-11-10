@@ -9,6 +9,7 @@ use App\Models\GuidedAssessment;
 use App\Models\GuidedQuestion;
 use App\Models\GuidedQuestionBank;
 use App\Models\GuidedQuestionTarget;
+use App\Models\GuidedScopeItem;
 use App\Models\ManagementSystem;
 use App\Models\Requirement;
 use App\Models\Risk;
@@ -53,6 +54,24 @@ class GuidedAssessmentHardeningTest extends TestCase
             'guided_question_bank_id' => $bank->id, 'name' => 'Assessment', 'created_by' => $coordinator->id]);
         $assignment = app(GuidedAssessmentWorkflowService::class)->assign($run, $question, $respondent, $coordinator);
         return compact('system', 'coordinator', 'respondent', 'requirement', 'bank', 'question', 'target', 'run', 'assignment');
+    }
+
+    public function test_created_by_form_fields_cannot_impersonate_another_user(): void
+    {
+        extract($this->fixture());
+        $other = $this->actor('OtherPerson');
+        $this->actingAs($coordinator);
+        $second = GuidedAssessment::create([
+            'management_system_id' => $system->id, 'guided_question_bank_id' => $bank->id,
+            'name' => 'Second run', 'created_by' => $other->id,
+        ]);
+        $this->assertSame($coordinator->id, $second->created_by);
+        $this->assertTrue($second->isMember($coordinator, ['coordinator']));
+        $item = GuidedScopeItem::create([
+            'guided_assessment_id' => $run->id, 'kind' => 'asset',
+            'title' => 'Scoped asset', 'created_by' => $other->id,
+        ]);
+        $this->assertSame($coordinator->id, $item->created_by);
     }
 
     public function test_incomplete_iso27001_2022_catalog_cannot_be_published_as_complete(): void
