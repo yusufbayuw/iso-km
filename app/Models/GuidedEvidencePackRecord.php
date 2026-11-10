@@ -3,10 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GuidedEvidencePackRecord extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(fn () => throw ValidationException::withMessages(['export' => 'Riwayat Evidence Pack tidak dapat diubah.']));
+        static::deleting(fn () => throw ValidationException::withMessages(['export' => 'Riwayat Evidence Pack tidak dapat dihapus.']));
+    }
     protected $fillable = [
         'guided_assessment_id', 'generated_by', 'includes_sensitive',
         'included_count', 'omitted_count', 'file_path', 'sha256',
