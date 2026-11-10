@@ -27,6 +27,12 @@ class GuidedEvidencePackTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     public function test_verified_evidence_pack_excludes_sensitive_files_unless_explicitly_authorized(): void
     {
         Storage::fake('local');
