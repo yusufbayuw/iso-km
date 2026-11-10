@@ -6,5 +6,8 @@
     <p><strong>Control belum terpetakan:</strong> {{ implode(', ', $coverage['missing_controls']) ?: '-' }}</p>
     <p><strong>Percabangan tidak valid:</strong> {{ implode(', ', $coverage['broken_branches']) ?: '-' }}</p>
     <p><strong>Pertanyaan bermasalah:</strong> {{ implode(', ', $coverage['invalid_questions']) ?: '-' }}</p>
+    <p><strong>Target penilaian ganda:</strong> {{ implode(', ', $coverage['duplicate_targets']) ?: '-' }}</p>
+    <p><strong>Katalog klausul ISO belum dimuat:</strong> {{ implode(', ', $coverage['catalog_missing_requirements']) ?: '-' }}</p>
+    <p><strong>Katalog kontrol ISO belum dimuat:</strong> {{ implode(', ', $coverage['catalog_missing_controls']) ?: '-' }}</p>
     <p class="text-xs text-gray-500">{{ $coverage['catalog_warning'] }}</p>
 </div>
