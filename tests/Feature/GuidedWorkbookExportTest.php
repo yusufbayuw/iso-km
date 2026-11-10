@@ -71,7 +71,11 @@ class GuidedWorkbookExportTest extends TestCase
         $template = GuidedExportTemplate::create([
             'management_system_id' => $system->id, 'name' => 'Example',
             'file_path' => 'templates/example.xlsx',
-            'mappings' => [['sheet' => 'Sheet1', 'cell' => 'A1', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status', 'required' => true]],
+            'report_type' => 'gap_analysis',
+            'mappings' => [
+                ['sheet' => 'Sheet1', 'cell' => 'A1', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status', 'required' => true],
+                ['sheet' => 'Sheet1', 'cell' => 'B1', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'notes_and_evidence', 'required' => true],
+            ],
         ]);
         $output = app(GuidedWorkbookExportService::class)->export($run, $template, $user);
         $this->assertTrue(Storage::disk('local')->exists($output));
@@ -80,11 +84,22 @@ class GuidedWorkbookExportTest extends TestCase
         $this->assertTrue($result->open(Storage::disk('local')->path($output)) === true);
         $sheet = $result->getFromName('xl/worksheets/sheet1.xml');
         $this->assertStringContainsString('Diterapkan Penuh', $sheet);
+        $this->assertStringContainsString('r="B1"', $sheet);
+        $this->assertStringContainsString('Backup berjalan', $sheet);
         $this->assertStringContainsString('<f>1+1</f>', $sheet);
+        $this->assertStringContainsString('fullCalcOnLoad="1"', $result->getFromName('xl/workbook.xml'));
         $this->assertSame('<chart>keep-original</chart>', $result->getFromName('xl/charts/chart1.xml'));
         $result->close();
 
-        $template->update(['mappings' => [['sheet' => 'Sheet1', 'cell' => 'A2', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status']]]);
+        $template->update(['mappings' => [['sheet' => 'Sheet1', 'cell' => 'A1', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status']]]);
+        try {
+            app(GuidedWorkbookExportService::class)->export($run, $template->refresh(), $user);
+            $this->fail('A final GAP report without evidence mapping must fail.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('mappings', $exception->errors());
+        }
+
+        $template->update(['report_type' => 'custom', 'mappings' => [['sheet' => 'Sheet1', 'cell' => 'A2', 'source' => 'control', 'code' => 'A.8.13', 'field' => 'status']]]);
         $this->expectException(ValidationException::class);
         app(GuidedWorkbookExportService::class)->export($run, $template->refresh(), $user);
     }
