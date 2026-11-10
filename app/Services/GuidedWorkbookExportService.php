@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\GuidedAssessment;
 use App\Models\GuidedExportRecord;
 use App\Models\GuidedDecision;
+use App\Models\GuidedScopeItem;
+use App\Models\Risk;
 use App\Models\GuidedExportTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\File;
@@ -25,6 +27,8 @@ class GuidedWorkbookExportService
     private const SHEET_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
     private const OFFICE_REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     private const PACKAGE_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+    private array $indexedData = [];
 
     public function export(GuidedAssessment $run, GuidedExportTemplate $template, User $actor, bool $final = true): string
     {
@@ -279,6 +283,56 @@ class GuidedWorkbookExportService
         return $index;
     }
 
+    /** Return genuine register values only. No example-organization rows are copied. */
+    private function resolveIndex(GuidedAssessment $run, string $source, string $code, string $field): string|int|float|null
+    {
+        if (! ctype_digit($code) || (int) $code < 1 || (int) $code > 10000) {
+            throw ValidationException::withMessages(['mapping' => 'Indeks inventaris dan risiko harus berupa nomor urut yang valid.']);
+        }
+        $cacheKey = $run->id.':'.$source;
+        if (! isset($this->indexedData[$cacheKey])) {
+            $this->indexedData[$cacheKey] = match ($source) {
+                'risk_index' => Risk::query()->where('management_system_id', $run->management_system_id)
+                    ->with('controls')->orderBy('id')->get()->all(),
+                'asset_index' => $run->scopeItems()->where('kind', 'asset')->orderBy('id')->get()->all(),
+                'activity_index' => $run->scopeItems()->where('kind', 'activity')->orderBy('id')->get()->all(),
+            };
+        }
+        $item = $this->indexedData[$cacheKey][(int) $code - 1] ?? null;
+        if ($item === null) { return null; }
+
+        if ($source === 'risk_index') {
+            $controls = $item->controls->pluck('code')->map(fn ($id) =>
+                preg_replace('/^A\\./i', '', (string) $id))->values()->all();
+            return match ($field) {
+                'category' => $item->category,
+                'title' => $item->title,
+                'description' => $item->description,
+                'control_1' => $controls[0] ?? null,
+                'control_2' => $controls[1] ?? null,
+                'control_3' => $controls[2] ?? null,
+                'likelihood' => $item->likelihood === null ? null : (int) $item->likelihood,
+                'impact' => $item->impact === null ? null : (int) $item->impact,
+                'treatment_plan' => $item->treatment_plan,
+                default => throw ValidationException::withMessages(['mapping' => 'Field register risiko tidak dikenal.']),
+            };
+        }
+
+        return match ($field) {
+            'category' => $item->category,
+            'title' => $item->title,
+            'in_scope' => $item->in_scope === null ? null : ($item->in_scope ? 'Ya' : 'Tidak'),
+            'classification' => match ($item->classification) {
+                'public' => 'Publik', 'internal' => 'Internal',
+                'confidential' => 'Rahasia', 'restricted' => 'Terbatas', default => null,
+            },
+            'related_controls' => collect($item->related_controls ?? [])->map(fn ($id) =>
+                preg_replace('/^A\\./i', '', (string) $id))->implode('; '),
+            'notes' => $item->notes,
+            default => throw ValidationException::withMessages(['mapping' => 'Field inventaris konteks tidak dikenal.']),
+        };
+    }
+
     private function resolve(GuidedAssessment $run, array $decisions, array $mapping, bool $final): string|int|float|null
     {
         $source = (string) ($mapping['source'] ?? '');
@@ -288,10 +342,18 @@ class GuidedWorkbookExportService
             return match ($field) {
                 'name' => $run->name,
                 'management_system' => $run->system?->name ?? '',
-                'scope' => $run->system?->scope?->name ?? '',
+                'scope', 'unit_name' => $run->system?->scope?->name,
+                'scope_description' => $run->system?->scope?->description,
+                'organization_name' => config('iso-km.organization_name'),
+                'assessor_names' => $run->memberships()->where('role', 'assessor')
+                    ->with('user')->get()->pluck('user.name')->filter()->implode(', ') ?: null,
+                'assessor_role' => config('iso-km.assessor_role'),
                 'date' => $run->locked_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
                 default => throw ValidationException::withMessages(['mapping' => 'Field asesmen tidak dikenal.']),
             };
+        }
+        if (in_array($source, ['risk_index', 'asset_index', 'activity_index'], true)) {
+            return $this->resolveIndex($run, $source, $code, $field);
         }
         if (! in_array($source, ['requirement', 'control'], true) || $code === '') {
             throw ValidationException::withMessages(['mapping' => 'Mapping harus menggunakan sumber requirement, control, atau assessment.']);
