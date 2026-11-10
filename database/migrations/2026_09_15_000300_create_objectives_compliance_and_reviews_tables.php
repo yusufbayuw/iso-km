@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('objectives', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('management_system_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('management_system_id')->constrained('management_systems', 'id', 'co_ms_system_fk')->cascadeOnDelete();
             $table->string('code')->unique();
             $table->string('title');
             $table->text('description')->nullable();
@@ -56,9 +56,9 @@ return new class extends Migration
         });
 
         Schema::create('compliance_obligation_management_system', function (Blueprint $table) {
-            $table->foreignId('compliance_obligation_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('compliance_obligation_id')->constrained('compliance_obligations', 'id', 'co_ms_obligation_fk')->cascadeOnDelete();
             $table->foreignId('management_system_id')->constrained()->cascadeOnDelete();
-            $table->primary(['compliance_obligation_id', 'management_system_id']);
+            $table->primary(['compliance_obligation_id', 'management_system_id'], 'co_ms_primary');
         });
 
         Schema::create('management_reviews', function (Blueprint $table) {
