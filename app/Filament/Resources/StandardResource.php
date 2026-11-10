@@ -43,7 +43,8 @@ class StandardResource extends Resource
             Tables\Columns\IconColumn::make('is_active')->label('Aktif')->boolean(),
         ])->actions([
             Tables\Actions\Action::make('import_catalog')->label('Impor Katalog XLSX')->icon('heroicon-o-arrow-up-tray')
-                ->visible(fn (Standard $record) => (auth()->user()?->can('guided.bank.manage') ?? false)
+                ->visible(fn (Standard $record) => config('iso-km.guided_assessment_enabled', false)
+                    && (auth()->user()?->can('guided.bank.manage') ?? false)
                     && (auth()->user()?->can('update_standard') ?? false))
                 ->form([
                     Forms\Components\FileUpload::make('file')->label('XLSX Katalog Standar')->required()
