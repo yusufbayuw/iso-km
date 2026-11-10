@@ -16,9 +16,12 @@ class GuidedAssessment extends Model
     {
         static::creating(function (self $run): void {
             if ($actor = auth()->user()) {
+                app(\App\Services\GuidedFeatureGate::class)->assertEnabled();
                 if (! $actor->can('guided.assessment.manage')) {
                     throw ValidationException::withMessages(['authorization' => 'Tidak diizinkan membuat periode asesmen.']);
                 }
+                app(\App\Services\GuidedSystemAccessService::class)
+                    ->assertCanAccess($actor, (int) $run->management_system_id);
                 $run->created_by = $actor->id;
             }
         });
