@@ -14,7 +14,9 @@ class GuidedQuestionBankService
     {
         $questions = $bank->questions()->with('targets')->get();
         $requirements = Requirement::query()->where('standard_id', $bank->standard_id)
-            ->where('is_mandatory', true)->get(['id', 'code', 'title']);
+            ->where('is_mandatory', true)
+            ->when($this->isIso27001($bank), fn ($q) => $q->whereNotIn('code', ['4', '5', '6', '7', '8', '9', '10']))
+            ->get(['id', 'code', 'title']);
         $controls = Control::query()->where('standard_id', $bank->standard_id)
             ->where('is_group', false)->get(['id', 'code', 'title']);
         $mappedRequirements = $questions->flatMap(fn ($q) => $q->targets->pluck('requirement_id'))->filter()->unique();
@@ -78,15 +80,21 @@ class GuidedQuestionBankService
         ];
     }
 
+    private function isIso27001(GuidedQuestionBank $bank): bool
+    {
+        $standard = $bank->standard;
+        return $standard !== null
+            && strtoupper(trim($standard->code)) === 'ISO/IEC 27001'
+            && str_starts_with((string) $standard->edition, '2022');
+    }
+
     /**
      * ISO/IEC 27001:2022 catalog identity checks use public clause/control
      * identifiers, never copyrighted normative wording or example-org data.
      */
     private function catalogGaps(GuidedQuestionBank $bank, $requirements, $controls): array
     {
-        $standard = $bank->standard;
-        if (! $standard || strtoupper(trim($standard->code)) !== 'ISO/IEC 27001'
-            || ! str_starts_with((string) $standard->edition, '2022')) {
+        if (! $this->isIso27001($bank)) {
             return ['requirements' => [], 'controls' => []];
         }
 
@@ -121,7 +129,9 @@ class GuidedQuestionBankService
         $options = ['Ya, dilaksanakan', 'Sebagian', 'Sedang direncanakan', 'Belum', 'Tidak mengetahui'];
         $count = 0;
         $requirements = Requirement::query()->where('standard_id', $bank->standard_id)
-            ->where('is_mandatory', true)->orderBy('sort_order')->get();
+            ->where('is_mandatory', true)
+            ->when($this->isIso27001($bank), fn ($q) => $q->whereNotIn('code', ['4', '5', '6', '7', '8', '9', '10']))
+            ->orderBy('sort_order')->get();
         foreach ($requirements as $requirement) {
             $question = $bank->questions()->firstOrCreate(['code' => 'REQ-'.$requirement->code], [
                 'prompt' => 'Bagaimana persyaratan '.$requirement->code.' - '.$requirement->title.' dipenuhi dalam lingkup organisasi?',
