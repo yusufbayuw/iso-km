@@ -110,6 +110,7 @@ class GuidedWorkbookMappingService
 
             return ['mappings' => $mappings, 'recognized_targets' => count($identities),
                 'context_capacities' => $context['capacities'],
+                'prefilled_organization' => $context['prefilled_organization'],
                 'warnings' => array_slice($warnings, 0, 50)];
         } finally {
             $zip->close();
