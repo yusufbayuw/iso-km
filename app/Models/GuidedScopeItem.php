@@ -35,6 +35,7 @@ class GuidedScopeItem extends Model
                 || ! $run->isMember($user, ['coordinator']))) {
                 throw ValidationException::withMessages(['authorization' => 'Hanya koordinator asesmen yang boleh memperbarui inventaris.']);
             }
+            if (! $item->exists && isset($user)) { $item->created_by = $user->id; }
         };
         static::saving($guard);
         static::deleting($guard);
