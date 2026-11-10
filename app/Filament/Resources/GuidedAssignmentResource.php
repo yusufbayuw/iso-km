@@ -6,6 +6,7 @@ use App\Filament\Resources\GuidedAssignmentResource\Pages;
 use App\Models\Evidence;
 use App\Models\GuidedAssignment;
 use App\Services\GuidedAssessmentWorkflowService;
+use App\Services\GuidedEvidenceAccessService;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -57,10 +58,8 @@ class GuidedAssignmentResource extends Resource
                         ->maxLength(2000),
                     Forms\Components\Textarea::make('notes')->label('Keterangan Tambahan'),
                     Forms\Components\Select::make('evidence_ids')->label('Evidence Terlampir')->multiple()->searchable()
-                        ->options(fn (GuidedAssignment $record) => Evidence::query()
-                            ->where('management_system_id', $record->assessment->management_system_id)
-                            ->when(! auth()->user()?->can('view_any_evidence'), fn ($q) => $q->whereRaw('1 = 0'))
-                            ->pluck('title', 'id')->all()),
+                        ->options(fn (GuidedAssignment $record) => app(GuidedEvidenceAccessService::class)
+                            ->selectableQuery($record, auth()->user())->pluck('title', 'id')->all()),
                 ])->action(function (GuidedAssignment $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->submitAnswer($record, auth()->user(),
                         ['value' => $record->question->answer_type === 'single_choice' ? ($data['choice'] ?? '') : ($data['value'] ?? '')], $data['context_key'], $data['notes'] ?? null, $data['evidence_ids'] ?? []);
