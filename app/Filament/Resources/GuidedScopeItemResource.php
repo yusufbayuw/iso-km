@@ -20,8 +20,8 @@ class GuidedScopeItemResource extends Resource
     protected static ?string $navigationLabel = 'Inventaris Konteks';
     protected static ?int $navigationSort = 6;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.assessment.view') ?? false; }
-    public static function canCreate(): bool { return auth()->user()?->can('guided.assessment.manage') ?? false; }
+    public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.view') ?? false); }
+    public static function canCreate(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.assessment.manage') ?? false); }
     public static function canEdit($record): bool
     {
         return self::canCreate() && ! $record->assessment?->locked_at
