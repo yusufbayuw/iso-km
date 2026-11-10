@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\GuidedExportTemplateResource\Pages;
 use App\Models\GuidedExportTemplate;
 use App\Services\GuidedWorkbookMappingService;
+use App\Services\GuidedSystemAccessService;
+use Illuminate\Database\Eloquent\Builder;
 use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -20,17 +22,49 @@ class GuidedExportTemplateResource extends Resource
     protected static ?string $navigationLabel = 'Template XLSX';
     protected static ?int $navigationSort = 25;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.template.manage') ?? false; }
+    public static function canViewAny(): bool
+    {
+        if (! config('iso-km.guided_assessment_enabled', false) || ! ($user = auth()->user())
+            || ! $user->can('guided.template.manage')) {
+            return false;
+        }
+        return $user->can('guided.template.manage_global')
+            || app(GuidedSystemAccessService::class)->accessibleSystems($user)->exists();
+    }
     public static function canCreate(): bool { return self::canViewAny(); }
-    public static function canEdit($record): bool { return self::canViewAny(); }
-    public static function canDelete($record): bool { return self::canViewAny() && ! $record->exports()->exists(); }
+    public static function canView($record): bool
+    {
+        return self::canViewAny()
+            && app(GuidedSystemAccessService::class)->canManageTemplate(auth()->user(), $record);
+    }
+    public static function canEdit($record): bool { return self::canView($record); }
+    public static function canDelete($record): bool { return self::canEdit($record) && ! $record->exports()->exists(); }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $user = auth()->user();
+        if (! $user || ! self::canViewAny()) {
+            return parent::getEloquentQuery()->whereRaw('1 = 0');
+        }
+        $access = app(GuidedSystemAccessService::class);
+        return parent::getEloquentQuery()->where(function (Builder $query) use ($user, $access): void {
+            $query->whereIn('management_system_id', $access->accessibleSystems($user)->select('id'));
+            if ($user->can('guided.template.manage_global')) {
+                $query->orWhereNull('management_system_id');
+            }
+        });
+    }
 
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen (opsional)')
-                ->relationship('system', 'name')->searchable()->preload()
-                ->helperText('Kosong = template berlaku untuk semua sistem manajemen dalam instalasi ini.'),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')
+                ->relationship('system', 'name', modifyQueryUsing: fn (Builder $query) => $query
+                    ->whereIn('id', app(GuidedSystemAccessService::class)
+                        ->accessibleSystems(auth()->user())->select('id')))
+                ->required(fn () => ! (auth()->user()?->can('guided.template.manage_global') ?? false))
+                ->searchable()->preload()
+                ->helperText('Template global hanya dapat dibuat/diedit oleh pemegang izin khusus.'),
             Forms\Components\TextInput::make('name')->label('Nama Template')->required(),
             Forms\Components\Select::make('report_type')->label('Jenis Laporan')->options(['custom' => 'Laporan Kustom', 'gap_analysis' => 'GAP Analysis Lengkap'])->default('custom')->required()
                 ->helperText('GAP Analysis lengkap mensyaratkan pemetaan semua kriteria yang dinilai, bukan hanya ringkasan.'),
@@ -89,7 +123,8 @@ class GuidedExportTemplateResource extends Resource
         ])->actions([
             Tables\Actions\Action::make('detect_mapping')->label('Deteksi Kolom')->icon('heroicon-o-magnifying-glass')
                 ->requiresConfirmation()
-                ->visible(fn (GuidedExportTemplate $record) => $record->is_active && $record->management_system_id !== null)
+                ->visible(fn (GuidedExportTemplate $record) => self::canEdit($record)
+                    && $record->is_active && $record->management_system_id !== null)
                 ->modalDescription('Sistem membaca kode persyaratan/kontrol dan kolom status/evidence. Pemetaan yang ada akan diganti. Periksa hasil sebelum ekspor final.')
                 ->action(function (GuidedExportTemplate $record): void {
                     $result = app(GuidedWorkbookMappingService::class)->suggest($record);
