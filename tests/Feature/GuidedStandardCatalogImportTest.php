@@ -19,6 +19,12 @@ class GuidedStandardCatalogImportTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('iso-km.guided_assessment_enabled', true);
+    }
+
     private function editor(): User
     {
         $user = User::create(['name' => 'Catalog Editor', 'email' => 'catalog@example.test', 'password' => 'password']);
