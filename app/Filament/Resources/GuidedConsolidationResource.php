@@ -22,7 +22,7 @@ class GuidedConsolidationResource extends Resource
     protected static ?string $navigationLabel = 'Hasil Konsolidasi';
     protected static ?int $navigationSort = 4;
 
-    public static function canViewAny(): bool { return auth()->user()?->can('guided.consolidate') ?? false; }
+    public static function canViewAny(): bool { return config('iso-km.guided_assessment_enabled', false) && (auth()->user()?->can('guided.consolidate') ?? false); }
     public static function canCreate(): bool { return false; }
     public static function canEdit($record): bool { return false; }
     public static function canDelete($record): bool { return false; }
