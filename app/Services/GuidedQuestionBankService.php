@@ -12,6 +12,7 @@ class GuidedQuestionBankService
 {
     public function coverage(GuidedQuestionBank $bank): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $questions = $bank->questions()->with('targets')->get();
         $requirements = Requirement::query()->where('standard_id', $bank->standard_id)
             ->where('is_mandatory', true)
@@ -131,6 +132,7 @@ class GuidedQuestionBankService
      */
     public function generateStarterQuestions(GuidedQuestionBank $bank, User $actor): int
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $actor->can('guided.bank.manage') || $bank->status !== 'draft') {
             throw ValidationException::withMessages(['bank' => 'Hanya bank draft yang berwenang dapat diisi otomatis.']);
         }
@@ -173,6 +175,7 @@ class GuidedQuestionBankService
 
     public function publish(GuidedQuestionBank $bank, User $actor): array
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         if (! $actor->can('guided.bank.manage')) {
             throw ValidationException::withMessages(['authorization' => 'Tidak berwenang menerbitkan bank pertanyaan.']);
         }
