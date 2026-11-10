@@ -9,6 +9,7 @@ class GuidedWorkbookTemplateFileService
 {
     public function path(string $relative): string
     {
+        app(GuidedFeatureGate::class)->assertEnabled();
         $segments = explode('/', $relative);
         if (! str_starts_with($relative, 'iso/guided/templates/')
             || str_contains($relative, chr(92))
