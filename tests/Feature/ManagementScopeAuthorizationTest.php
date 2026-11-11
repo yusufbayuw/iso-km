@@ -72,6 +72,13 @@ class ManagementScopeAuthorizationTest extends TestCase
         $this->actingAs($worker);
         $this->assertTrue(app(RiskPolicy::class)->update($worker, $risk));
         $this->assertContains($risk->id, RiskResource::getEloquentQuery()->pluck('id')->all());
+        // Native edit form may display its authorized record's existing
+        // system, without offering other foreign systems for creation.
+        $options = app(ModelScopeAuthorizationService::class)
+            ->scopeAvailableSystems(ManagementSystem::query(), $worker, $risk->management_system_id)
+            ->pluck('id')->all();
+        $this->assertContains($system->id, $options);
+        $this->assertNotContains(999999, $options);
     }
 
     public function test_competency_register_uses_user_id_without_a_nonexistent_owner_column(): void
