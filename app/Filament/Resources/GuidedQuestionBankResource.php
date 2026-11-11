@@ -11,6 +11,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Validation\ValidationException;
 
 class GuidedQuestionBankResource extends Resource
 {
@@ -47,21 +48,50 @@ class GuidedQuestionBankResource extends Resource
             Tables\Columns\TextColumn::make('questions_count')->label('Pertanyaan')->counts('questions'),
         ])->actions([
             Tables\Actions\Action::make('generate')->label('Buat Pertanyaan Awal')->icon('heroicon-o-sparkles')
+                ->tooltip('Menambahkan pertanyaan induk yang belum ada dari master standar. Tidak menduplikasi atau mengganti pertanyaan existing.')
+                ->modalHeading('Lengkapi pertanyaan awal')
+                ->modalDescription('Hanya pertanyaan induk yang belum ada yang ditambahkan. Jawaban, pertanyaan, dan penyesuaian yang sudah ada tidak dihapus. Jika bank sudah lengkap, tidak ada pertanyaan baru.')
                 ->requiresConfirmation()->visible(fn (GuidedQuestionBank $record) => $record->status === 'draft')
                 ->action(function (GuidedQuestionBank $record): void {
-                    $count = app(GuidedQuestionBankService::class)->generateStarterQuestions($record, auth()->user());
-                    Notification::make()->success()->title($count.' pertanyaan dari master standar tersedia untuk disunting')->send();
+                    $before = $record->questions()->count();
+                    app(GuidedQuestionBankService::class)->generateStarterQuestions($record, auth()->user());
+                    $added = max(0, $record->questions()->count() - $before);
+                    Notification::make()->success()
+                        ->title($added ? $added.' pertanyaan baru ditambahkan' : 'Tidak ada pertanyaan baru')
+                        ->body('Jumlah pertanyaan sekarang: '.$record->questions()->count().'. Periksa isi dan Coverage sebelum diterbitkan.')
+                        ->send();
                 }),
             Tables\Actions\Action::make('coverage')->label('Coverage')->icon('heroicon-o-chart-bar')
+                ->tooltip('Memeriksa cakupan klausul, kontrol, duplikasi, dan percabangan; tidak mengubah bank.')
+                ->modalHeading('Pemeriksaan Cakupan Bank')
                 ->modalSubmitAction(false)->modalCancelActionLabel('Tutup')
                 ->modalContent(fn (GuidedQuestionBank $record) => view('filament.guided.coverage', ['coverage' => app(GuidedQuestionBankService::class)->coverage($record)])),
-            Tables\Actions\Action::make('publish')->label('Terbitkan')->color('success')->requiresConfirmation()
+            Tables\Actions\Action::make('publish')->label('Terbitkan')->color('success')
+                ->tooltip('Terbitkan bank yang sudah diperiksa agar bisa dipilih saat memulai asesmen.')
+                ->modalHeading('Terbitkan Bank Pertanyaan')
+                ->modalDescription('Pastikan seluruh isi pertanyaan sudah ditinjau dan Coverage lengkap. Setelah diterbitkan, isi bank tidak dapat diedit langsung; perubahan berikutnya memerlukan versi baru.')
+                ->requiresConfirmation()
                 ->visible(fn (GuidedQuestionBank $record) => $record->status === 'draft')
                 ->action(function (GuidedQuestionBank $record): void {
-                    app(GuidedQuestionBankService::class)->publish($record, auth()->user());
-                    Notification::make()->success()->title('Bank pertanyaan diterbitkan')->send();
+                    try {
+                        app(GuidedQuestionBankService::class)->publish($record, auth()->user());
+                    } catch (ValidationException $exception) {
+                        $message = (string) (collect($exception->errors())->flatten()->first()
+                            ?? 'Bank belum memenuhi persyaratan untuk diterbitkan.');
+                        Notification::make()->danger()
+                            ->title('Bank belum dapat diterbitkan')
+                            ->body($message)
+                            ->persistent()
+                            ->send();
+                        return;
+                    }
+                    Notification::make()->success()
+                        ->title('Bank pertanyaan diterbitkan')
+                        ->body('Bank dapat digunakan untuk membuat asesmen baru. Untuk perubahan isi, buat versi bank berikutnya.')
+                        ->send();
                 }),
-            Tables\Actions\EditAction::make(),
+            Tables\Actions\EditAction::make()->label('Ubah Info Bank')
+                ->tooltip('Ubah nama dan informasi bank. Isi pertanyaan dikelola dari menu Pertanyaan & Kriteria.'),
             Tables\Actions\DeleteAction::make(),
         ]);
     }

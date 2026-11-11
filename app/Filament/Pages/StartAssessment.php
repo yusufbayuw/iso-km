@@ -12,6 +12,8 @@ use App\Models\GuidedAnswerDraft;
 use App\Models\GuidedAssessment;
 use App\Models\GuidedAssignment;
 use App\Models\GuidedExportTemplate;
+use App\Models\GuidedQuestionBank;
+use App\Models\ManagementSystem;
 use App\Models\GuidedScopeItem;
 use App\Models\User;
 use App\Services\GuidedAssessmentWorkflowService;
@@ -84,7 +86,13 @@ class StartAssessment extends Page implements HasForms
                 ->preload()
                 ->native(false)
                 ->required()
-                ->helperText('Hanya sistem dalam lingkup kewenangan Anda.'),
+                ->default(fn () => count($this->systems) === 1 ? array_key_first($this->systems) : null)
+                ->live()
+                ->afterStateUpdated(function (): void {
+                    unset($this->bankReadiness);
+                    $this->resetValidation('startData.system_id');
+                })
+                ->helperText('Hanya sistem dalam lingkup kewenangan Anda. Bank pertanyaan harus berstatus Terbit.'),
             Forms\Components\TextInput::make('name')
                 ->label('Nama asesmen')
                 ->placeholder('Contoh: Asesmen Keamanan Informasi Semester 1')
@@ -302,6 +310,49 @@ class StartAssessment extends Page implements HasForms
             ->orderBy('name')->pluck('name', 'id')->all();
     }
 
+    /**
+     * User-facing readiness of the selected standard. This is informational:
+     * GuidedWizardDraftService::start() remains the server-side authority.
+     */
+    #[Computed]
+    public function bankReadiness(): ?array
+    {
+        $systemId = (int) ($this->startData['system_id'] ?? 0);
+        if (! $systemId || ! array_key_exists($systemId, $this->systems)) {
+            return null;
+        }
+        $standardId = ManagementSystem::query()->whereKey($systemId)->value('standard_id');
+        if (! $standardId) { return null; }
+
+        $published = GuidedQuestionBank::query()
+            ->where('standard_id', $standardId)
+            ->where('status', 'published')
+            ->orderByDesc('version')->orderByDesc('id')->first();
+        if ($published) {
+            return [
+                'ready' => true,
+                'name' => $published->name,
+                'version' => $published->version,
+                'question_count' => $published->questions()->count(),
+                'message' => 'Bank pertanyaan sudah terbit dan siap digunakan.',
+            ];
+        }
+
+        $draft = GuidedQuestionBank::query()
+            ->where('standard_id', $standardId)
+            ->where('status', 'draft')
+            ->orderByDesc('version')->orderByDesc('id')->first();
+        return [
+            'ready' => false,
+            'name' => $draft?->name,
+            'version' => $draft?->version,
+            'question_count' => $draft?->questions()->count() ?? 0,
+            'message' => $draft
+                ? 'Bank pertanyaan masih Draft. Administrator harus memeriksa Coverage dan isi pertanyaan, kemudian memilih Terbitkan sebelum asesmen baru dibuat.'
+                : 'Belum ada bank pertanyaan untuk standar ini. Administrator perlu membuat bank, memeriksa cakupannya, lalu menerbitkannya.',
+        ];
+    }
+
     #[Computed]
     public function assignments()
     {
@@ -335,9 +386,26 @@ class StartAssessment extends Page implements HasForms
     public function start(): void
     {
         $data = $this->startForm->getState();
-        $run = app(GuidedWizardDraftService::class)->start(
-            auth()->user(), (int) $data['system_id'], $data['name']
-        );
+        try {
+            $run = app(GuidedWizardDraftService::class)->start(
+                auth()->user(), (int) $data['system_id'], $data['name']
+            );
+        } catch (ValidationException $exception) {
+            // Service-level errors (such as a draft/unpublished question bank)
+            // may not match a Filament form field. Surface them explicitly
+            // instead of making the button appear unresponsive.
+            $message = (string) (collect($exception->errors())->flatten()->first()
+                ?? 'Periksa kesiapan bank pertanyaan dan kewenangan Anda.');
+            $this->addError('startData.system_id', $message);
+            Notification::make()
+                ->danger()
+                ->title('Asesmen belum dapat dimulai')
+                ->body($message)
+                ->persistent()
+                ->send();
+            return;
+        }
+
         $this->openRun($run);
         $this->stage = 'questions';
         Notification::make()->success()->title('Asesmen baru dibuat. Jawaban dapat disimpan bertahap.')->send();
