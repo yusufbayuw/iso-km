@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use App\Services\ManagementReviewContextService;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ManagementReview extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected static function booted(): void
