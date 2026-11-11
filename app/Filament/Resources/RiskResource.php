@@ -27,7 +27,7 @@ class RiskResource extends Resource
     {
         $scale = [1 => '1 - Sangat Rendah',2 => '2 - Rendah',3 => '3 - Sedang',4 => '4 - Tinggi',5 => '5 - Sangat Tinggi'];
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->live()->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode Risiko')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Risiko')->required()->columnSpanFull(),
             Forms\Components\TextInput::make('category')->label('Kategori'),

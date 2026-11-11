@@ -27,7 +27,7 @@ class EvidenceResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->searchable()->preload()->required(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->live()->searchable()->preload()->required(),
             Forms\Components\TextInput::make('title')->label('Judul Evidence')->required()->columnSpanFull(),
             Forms\Components\Select::make('type')->label('Jenis')->options(['record' => 'Rekaman','screenshot' => 'Screenshot','report' => 'Laporan','log' => 'Log','configuration' => 'Konfigurasi','other' => 'Lainnya'])->required(),
             Forms\Components\TextInput::make('source')->label('Sumber')->placeholder('Sistem, unit, vendor, atau proses'),

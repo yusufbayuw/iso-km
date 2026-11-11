@@ -26,7 +26,7 @@ class RequirementAssessmentResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->live()->required()->searchable()->preload(),
             Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
                 ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->required()->searchable()->preload(),
             Forms\Components\Select::make('status')->label('Status')->options(['not_assessed' => 'Belum Dinilai','nonconformant' => 'Tidak Sesuai','partial' => 'Sebagian Sesuai','conformant' => 'Sesuai','not_applicable' => 'Tidak Berlaku'])->required(),

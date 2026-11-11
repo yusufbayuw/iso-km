@@ -27,7 +27,7 @@ class StatementOfApplicabilityResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->live()->required()->searchable()->preload(),
             Forms\Components\Select::make('control_id')->label('Control')->relationship('control', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
                 ->where('is_group', false)
                 ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->required()->searchable()->preload(),

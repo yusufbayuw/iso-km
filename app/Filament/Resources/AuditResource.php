@@ -26,7 +26,7 @@ class AuditResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->live()->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode Audit')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Judul Audit')->required()->columnSpanFull(),
             Forms\Components\Select::make('type')->label('Jenis')->options(['internal' => 'Internal','external' => 'Eksternal','supplier' => 'Supplier'])->required()->default('internal'),

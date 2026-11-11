@@ -24,7 +24,7 @@ class TrainingProgramResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode')->required(),
             Forms\Components\TextInput::make('title')->label('Program')->required()->columnSpanFull(),
             Forms\Components\Select::make('category')->label('Kategori')->options(['awareness' => 'Awareness','training' => 'Training','certification' => 'Certification','exercise' => 'Exercise / Drill','onboarding' => 'Onboarding'])->required()->default('awareness'),
