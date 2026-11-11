@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class EvidenceScheduleResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = EvidenceSchedule::class;
     protected static ?string $navigationIcon = 'heroicon-o-arrow-path-rounded-square';
     protected static ?string $navigationGroup = 'Assurance';

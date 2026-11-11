@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class ObjectiveResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Objective::class;
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar-square';
     protected static ?string $navigationGroup = 'Performance & Review';

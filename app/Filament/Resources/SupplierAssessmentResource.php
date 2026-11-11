@@ -15,6 +15,8 @@ use Filament\Tables\Table;
 
 class SupplierAssessmentResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = SupplierAssessment::class;
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
     protected static ?string $navigationGroup = 'Third Parties';

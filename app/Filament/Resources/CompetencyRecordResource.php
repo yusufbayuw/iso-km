@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class CompetencyRecordResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = CompetencyRecord::class;
     protected static ?string $navigationIcon = 'heroicon-o-identification';
     protected static ?string $navigationGroup = 'People & Competence';

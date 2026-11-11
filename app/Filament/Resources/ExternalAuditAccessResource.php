@@ -13,6 +13,8 @@ use Filament\Tables\Table;
 
 class ExternalAuditAccessResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = ExternalAuditAccess::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Audit & Improvement';

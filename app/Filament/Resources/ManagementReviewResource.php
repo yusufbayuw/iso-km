@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class ManagementReviewResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = ManagementReview::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Performance & Review';
