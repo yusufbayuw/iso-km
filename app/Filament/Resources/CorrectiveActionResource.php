@@ -22,6 +22,13 @@ class CorrectiveActionResource extends Resource
     protected static ?string $pluralModelLabel = 'CAPA Tracker';
     protected static ?int $navigationSort = 130;
 
+    // Reviewers need the verification action without a second CRUD role grant.
+    // The resource query still applies the existing management-system scope.
+    public static function canViewAny(): bool
+    {
+        return parent::canViewAny() || (auth()->user()?->can('capa.verify') ?? false);
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([

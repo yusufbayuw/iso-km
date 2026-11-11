@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\ActionItemResource;
+use App\Filament\Resources\CorrectiveActionResource;
 use App\Models\ActionItem;
 use App\Models\Audit;
 use App\Models\AuditChecklistItem;
@@ -59,6 +60,18 @@ class AutomaticAuditCapaIntegrationTest extends TestCase
 
         $this->actingAs($unrelated);
         $this->assertNotContains($task->id, ActionItemResource::getEloquentQuery()->pluck('id')->all());
+    }
+
+    public function test_verifier_can_open_capa_tracker_with_verification_permission_alone(): void
+    {
+        $reviewer = User::create(['name' => 'Verifier', 'email' => 'reviewer-only@example.test', 'password' => 'password']);
+        foreach (['portal.access', 'capa.verify'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+            $reviewer->givePermissionTo($permission);
+        }
+
+        $this->actingAs($reviewer);
+        $this->get(CorrectiveActionResource::getUrl('index'))->assertOk();
     }
 
     public function test_audit_completion_waits_for_reviewed_checklist_without_extra_fields(): void
