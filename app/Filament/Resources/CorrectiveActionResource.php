@@ -37,7 +37,7 @@ class CorrectiveActionResource extends Resource
             Forms\Components\Textarea::make('action')->label('Corrective Action')->required()->columnSpanFull(),
             Forms\Components\DatePicker::make('due_date')->label('Due Date')->native(false),
             Forms\Components\Select::make('status')->label('Status')->options(['open' => 'Open','in_progress' => 'In Progress','verification' => 'Verification','completed' => 'Completed'])->required()->default('open')
-                ->disabled(fn (?CorrectiveAction $record): bool => $record?->status === 'completed')
+                ->disabled()->dehydrated(false)
                 ->helperText('Penyelesaian dan verifikasi otomatis dicatat dari aksi tabel.'),
             Forms\Components\Placeholder::make('verification_summary')->label('Riwayat Verifikasi')
                 ->content(fn (?CorrectiveAction $record): string => $record?->verified_at
