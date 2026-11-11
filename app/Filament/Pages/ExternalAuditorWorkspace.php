@@ -7,11 +7,16 @@ use App\Models\ManagementSystem;
 use App\Services\ExternalAuditPackService;
 use App\Services\TraceabilityMatrixService;
 use Filament\Actions\Action;
+use Filament\Forms;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 
-class ExternalAuditorWorkspace extends Page
+class ExternalAuditorWorkspace extends Page implements HasForms
 {
+    use InteractsWithForms;
     protected static ?string $navigationIcon = 'heroicon-o-eye';
     protected static ?string $navigationGroup = 'Audit & Improvement';
     protected static ?string $navigationLabel = 'External Audit Workspace';
@@ -21,12 +26,47 @@ class ExternalAuditorWorkspace extends Page
     protected static string $view = 'filament.pages.external-auditor-workspace';
 
     public ?int $managementSystemId = null;
+    public ?array $managementSystemData = [];
+
+    protected function getForms(): array { return ['managementSystemForm']; }
+
+    public function managementSystemForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('id')
+                ->label('Authorized Management System')
+                ->options(fn (): array => $this->systemOptions())
+                ->getSearchResultsUsing(fn (string $search): array => $this->systemOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => $this->systemLabel($value))
+                ->searchable()->preload()->native(false)->live()
+                ->afterStateUpdated(function ($state): void {
+                    $requestedId = filled($state) ? (int) $state : null;
+                    $this->managementSystemId = $this->availableSystems()->firstWhere('id', $requestedId)?->id;
+                }),
+        ])->statePath('managementSystemData');
+    }
+
+    private function systemOptions(?string $search = null): array
+    {
+        return $this->availableSystems()
+            ->filter(fn (ManagementSystem $system): bool => blank($search)
+                || mb_stripos($system->code.' '.$system->name, $search) !== false)
+            ->take(50)
+            ->mapWithKeys(fn (ManagementSystem $system) => [$system->id => $system->code.' — '.$system->name])->all();
+    }
+
+    private function systemLabel($value): ?string
+    {
+        $system = $this->availableSystems()->firstWhere('id', (int) $value);
+        return $system ? $system->code.' — '.$system->name : null;
+    }
 
     public function mount(): void
     {
         $systems = $this->availableSystems();
         $requested = request()->integer('managementSystemId');
         $this->managementSystemId = $systems->firstWhere('id', $requested)?->id ?? $systems->first()?->id;
+        $this->managementSystemForm->fill(['id' => $this->managementSystemId]);
     }
 
     public static function canAccess(): bool
@@ -52,7 +92,6 @@ class ExternalAuditorWorkspace extends Page
 
     protected function getViewData(): array
     {
-        $systems = $this->availableSystems();
         $matrix = null;
         $access = null;
         if ($this->managementSystemId) {
@@ -60,7 +99,7 @@ class ExternalAuditorWorkspace extends Page
             $matrix = app(TraceabilityMatrixService::class)->build($system);
             $access = $this->currentAccess();
         }
-        return compact('systems', 'matrix', 'access');
+        return compact('matrix', 'access');
     }
 
     private function availableSystems(): Collection

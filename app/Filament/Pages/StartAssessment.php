@@ -80,7 +80,9 @@ class StartAssessment extends Page implements HasForms
         return $form->schema([
             Forms\Components\Select::make('system_id')
                 ->label('Sistem manajemen yang dinilai')
-                ->options(fn (): array => $this->systems)
+                ->options(fn (): array => $this->systemOptions())
+                ->getSearchResultsUsing(fn (string $search): array => $this->systemOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => $this->systems[$value] ?? null)
                 ->placeholder('Pilih sistem manajemen')
                 ->searchable()
                 ->preload()
@@ -106,9 +108,9 @@ class StartAssessment extends Page implements HasForms
         return $form->schema([
             Forms\Components\Select::make('run_id')
                 ->label('Asesmen yang dapat Anda akses')
-                ->options(fn (): array => $this->runs->mapWithKeys(
-                    fn ($run) => [$run->id => $run->name.' — '.($run->system?->name ?? '-')]
-                )->all())
+                ->options(fn (): array => $this->accessibleRunOptions())
+                ->getSearchResultsUsing(fn (string $search): array => $this->accessibleRunOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => $this->accessibleRunLabel($value))
                 ->placeholder('Pilih asesmen')
                 ->searchable()
                 ->preload()
@@ -127,13 +129,9 @@ class StartAssessment extends Page implements HasForms
         return $form->schema([
             Forms\Components\Select::make('question_id')
                 ->label('Pilih pertanyaan')
-                ->options(fn (): array => $this->assignments->mapWithKeys(
-                    fn (GuidedAssignment $assignment) => [
-                        $assignment->guided_question_id => $assignment->question->code
-                            .' — '.$assignment->question->prompt
-                            .' ['.($assignment->status === 'submitted' ? 'Terkirim' : 'Belum selesai').']',
-                    ]
-                )->all())
+                ->options(fn (): array => $this->assignmentOptions())
+                ->getSearchResultsUsing(fn (string $search): array => $this->assignmentOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => $this->assignmentOptionLabel($value))
                 ->placeholder('Cari berdasarkan kode atau isi pertanyaan')
                 ->searchable()
                 ->preload()
@@ -193,6 +191,8 @@ class StartAssessment extends Page implements HasForms
                 ->label('Bukti pendukung yang tersedia')
                 ->helperText('Jika belum ada bukti, tetap catat kondisi sebenarnya. Pemeriksa dapat meminta bukti tambahan.')
                 ->options(fn (): array => $this->evidenceChoices)
+                ->getSearchResultsUsing(fn (string $search): array => $this->availableEvidenceChoices($search))
+                ->getOptionLabelsUsing(fn (array $values): array => $this->availableEvidenceChoices(ids: $values))
                 ->multiple()
                 ->searchable()
                 ->preload()
@@ -231,10 +231,14 @@ class StartAssessment extends Page implements HasForms
                 ->label('Kontributor')
                 ->required()
                 ->searchable()
+                ->preload()
+                ->options(fn (): array => User::query()
+                    ->permission('guided.answer.submit')
+                    ->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                 ->getSearchResultsUsing(fn (string $search): array => User::query()
                     ->permission('guided.answer.submit')
                     ->where('name', 'like', '%'.$search.'%')
-                    ->orderBy('name')->limit(30)->pluck('name', 'id')->all())
+                    ->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                 ->getOptionLabelUsing(fn ($value): ?string =>
                     User::query()->whereKey($value)->value('name'))
                 ->helperText('Hanya pengguna dengan izin menjawab yang dapat ditugaskan.'),
@@ -371,10 +375,73 @@ class StartAssessment extends Page implements HasForms
     #[Computed]
     public function evidenceChoices(): array
     {
+        return $this->availableEvidenceChoices();
+    }
+
+    private function systemOptions(?string $search = null): array
+    {
+        $user = auth()->user();
+        if (! $user || ! $user->can('guided.assessment.manage') || ! $user->can('guided.answer.submit')) {
+            return [];
+        }
+
+        return app(GuidedSystemAccessService::class)->accessibleSystems($user)
+            ->when(filled($search), fn ($query) => $query->where('name', 'like', '%'.$search.'%'))
+            ->orderBy('name')->limit(50)->pluck('name', 'id')->all();
+    }
+
+    private function accessibleRunOptions(?string $search = null): array
+    {
+        return GuidedAssessment::query()
+            ->whereHas('memberships', fn ($query) => $query->where('user_id', auth()->id()))
+            ->when(filled($search), fn ($query) => $query->where(fn ($query) => $query
+                ->where('name', 'like', '%'.$search.'%')
+                ->orWhereHas('system', fn ($system) => $system->where('name', 'like', '%'.$search.'%'))))
+            ->with('system')->latest('id')->limit(50)->get()
+            ->mapWithKeys(fn (GuidedAssessment $run) => [$run->id => $run->name.' — '.($run->system?->name ?? '-')])
+            ->all();
+    }
+
+    private function accessibleRunLabel($value): ?string
+    {
+        $run = $this->visibleRun((int) $value);
+        return $run ? $run->name.' — '.($run->system?->name ?? '-') : null;
+    }
+
+    private function assignmentOptions(?string $search = null): array
+    {
+        return $this->assignments
+            ->filter(fn (GuidedAssignment $assignment) => blank($search)
+                || mb_stripos($this->assignmentLabel($assignment), $search) !== false)
+            ->take(50)
+            ->mapWithKeys(fn (GuidedAssignment $assignment) => [
+                $assignment->guided_question_id => $this->assignmentLabel($assignment),
+            ])->all();
+    }
+
+    private function assignmentOptionLabel($value): ?string
+    {
+        $assignment = $this->assignments->firstWhere('guided_question_id', (int) $value);
+        return $assignment ? $this->assignmentLabel($assignment) : null;
+    }
+
+    private function assignmentLabel(GuidedAssignment $assignment): string
+    {
+        return $assignment->question->code.' — '.$assignment->question->prompt
+            .' ['.($assignment->status === 'submitted' ? 'Terkirim' : 'Belum selesai').']';
+    }
+
+    private function availableEvidenceChoices(?string $search = null, ?array $ids = null): array
+    {
         $assignment = $this->currentAssignment;
-        return $assignment ? app(GuidedEvidenceAccessService::class)
-            ->selectableQuery($assignment, auth()->user())->orderBy('title')->limit(100)
-            ->pluck('title', 'id')->all() : [];
+        if (! $assignment) { return []; }
+
+        return app(GuidedEvidenceAccessService::class)
+            ->selectableQuery($assignment, auth()->user())
+            ->when($ids !== null, fn ($query) => $query->whereIn('id', $ids))
+            ->when(filled($search), fn ($query) => $query->where('title', 'like', '%'.$search.'%'))
+            ->orderBy('title')->limit($ids === null ? 50 : max(1, count($ids)))
+            ->pluck('title', 'id')->all();
     }
 
     #[Computed]

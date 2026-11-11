@@ -6,10 +6,16 @@ use App\Models\ManagementSystem;
 use App\Services\AuditPackService;
 use App\Services\TraceabilityMatrixService;
 use Filament\Actions\Action;
+use Filament\Forms;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Pages\Page;
+use Illuminate\Database\Eloquent\Builder;
 
-class AuditorWorkspace extends Page
+class AuditorWorkspace extends Page implements HasForms
 {
+    use InteractsWithForms;
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?string $navigationGroup = 'Audit & Improvement';
     protected static ?string $navigationLabel = 'Auditor Workspace';
@@ -19,6 +25,37 @@ class AuditorWorkspace extends Page
     protected static string $view = 'filament.pages.auditor-workspace';
 
     public ?int $managementSystemId = null;
+    public ?array $managementSystemData = [];
+
+    protected function getForms(): array { return ['managementSystemForm']; }
+
+    public function managementSystemForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('id')
+                ->label('Sistem Manajemen')
+                ->options(fn (): array => $this->systemOptions())
+                ->getSearchResultsUsing(fn (string $search): array => $this->systemOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => $this->systemLabel($value))
+                ->searchable()->preload()->native(false)->live()
+                ->afterStateUpdated(fn ($state) => $this->managementSystemId = filled($state) ? (int) $state : null),
+        ])->statePath('managementSystemData');
+    }
+
+    private function systemOptions(?string $search = null): array
+    {
+        return ManagementSystem::query()
+            ->when(filled($search), fn (Builder $query) => $query->where(fn (Builder $query) =>
+                $query->where('code', 'like', '%'.$search.'%')->orWhere('name', 'like', '%'.$search.'%')))
+            ->orderBy('code')->limit(50)->get(['id', 'code', 'name'])
+            ->mapWithKeys(fn (ManagementSystem $system) => [$system->id => $system->code.' — '.$system->name])->all();
+    }
+
+    private function systemLabel($value): ?string
+    {
+        $system = ManagementSystem::query()->find($value);
+        return $system ? $system->code.' — '.$system->name : null;
+    }
 
     public function mount(): void
     {
@@ -26,6 +63,7 @@ class AuditorWorkspace extends Page
         $this->managementSystemId = ManagementSystem::query()
             ->when($requested > 0, fn ($query) => $query->whereKey($requested))
             ->value('id') ?? ManagementSystem::query()->orderBy('code')->value('id');
+        $this->managementSystemForm->fill(['id' => $this->managementSystemId]);
     }
 
     public static function canAccess(): bool
@@ -51,7 +89,6 @@ class AuditorWorkspace extends Page
 
     protected function getViewData(): array
     {
-        $systems = ManagementSystem::query()->orderBy('code')->get(['id', 'code', 'name']);
         $matrix = null;
 
         if ($this->managementSystemId !== null) {
@@ -61,6 +98,6 @@ class AuditorWorkspace extends Page
             }
         }
 
-        return compact('systems', 'matrix');
+        return compact('matrix');
     }
 }

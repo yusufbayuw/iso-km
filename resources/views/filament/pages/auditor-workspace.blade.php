@@ -5,13 +5,7 @@
                 <div class="text-sm font-medium">Sistem Manajemen</div>
                 <div class="mt-1 text-xs text-gray-500">Pilih scope audit. Matrix dibentuk langsung dari source-of-truth yang sama dengan assessment, evidence, risk, people competence, supplier, audit, CAPA, dan cross-standard reuse.</div>
             </div>
-            <x-filament::input.wrapper>
-                <x-filament::input.select wire:model.live="managementSystemId">
-                    @foreach ($systems as $system)
-                        <option value="{{ $system->id }}">{{ $system->code }} — {{ $system->name }}</option>
-                    @endforeach
-                </x-filament::input.select>
-            </x-filament::input.wrapper>
+            {{ $this->managementSystemForm }}
         </div>
     </x-filament::section>
 

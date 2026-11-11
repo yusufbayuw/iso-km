@@ -5,13 +5,7 @@
                 <div class="text-sm font-medium">Authorized Management System</div>
                 <div class="mt-1 text-xs text-gray-500">Workspace ini read-only. Data dibatasi oleh grant aktif dan tidak menyediakan CRUD internal.</div>
             </div>
-            <x-filament::input.wrapper>
-                <x-filament::input.select wire:model.live="managementSystemId">
-                    @foreach ($systems as $system)
-                        <option value="{{ $system->id }}">{{ $system->code }} — {{ $system->name }}</option>
-                    @endforeach
-                </x-filament::input.select>
-            </x-filament::input.wrapper>
+            {{ $this->managementSystemForm }}
         </div>
         @if ($access)
             <div class="mt-3 text-xs text-gray-500">Access expires: {{ $access->expires_at?->format('d/m/Y H:i') ?? 'no expiry' }} · Audit pack: {{ $access->allow_audit_pack ? 'allowed' : 'not allowed' }}</div>

@@ -57,15 +57,28 @@ class GuidedAssignmentResource extends Resource
                         ->required(fn (GuidedAssignment $record) => $record->question->answer_type !== 'single_choice')
                         ->maxLength(2000),
                     Forms\Components\Textarea::make('notes')->label('Keterangan Tambahan'),
-                    Forms\Components\Select::make('evidence_ids')->label('Evidence Terlampir')->multiple()->searchable()
-                        ->options(fn (GuidedAssignment $record) => app(GuidedEvidenceAccessService::class)
-                            ->selectableQuery($record, auth()->user())->pluck('title', 'id')->all()),
+                    Forms\Components\Select::make('evidence_ids')->label('Evidence Terlampir')->multiple()->searchable()->preload()
+                        ->options(fn (GuidedAssignment $record): array => self::evidenceOptions($record))
+                        ->getSearchResultsUsing(fn (GuidedAssignment $record, string $search): array =>
+                            self::evidenceOptions($record, $search))
+                        ->getOptionLabelsUsing(fn (GuidedAssignment $record, array $values): array =>
+                            self::evidenceOptions($record, ids: $values)),
                 ])->action(function (GuidedAssignment $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->submitAnswer($record, auth()->user(),
                         ['value' => $record->question->answer_type === 'single_choice' ? ($data['choice'] ?? '') : ($data['value'] ?? '')], $data['context_key'], $data['notes'] ?? null, $data['evidence_ids'] ?? []);
                     Notification::make()->success()->title('Jawaban tersimpan sebagai entri baru')->send();
                 }),
         ]);
+    }
+
+    private static function evidenceOptions(GuidedAssignment $record, ?string $search = null, ?array $ids = null): array
+    {
+        return app(GuidedEvidenceAccessService::class)
+            ->selectableQuery($record, auth()->user())
+            ->when($ids !== null, fn (Builder $query) => $query->whereIn('id', $ids))
+            ->when(filled($search), fn (Builder $query) => $query->where('title', 'like', '%'.$search.'%'))
+            ->orderBy('title')->limit($ids === null ? 50 : max(1, count($ids)))
+            ->pluck('title', 'id')->all();
     }
 
     public static function getPages(): array { return ['index' => Pages\ListGuidedAssignments::route('/')]; }
