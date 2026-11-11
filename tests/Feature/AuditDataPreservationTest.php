@@ -46,6 +46,7 @@ class AuditDataPreservationTest extends TestCase
         CorrectiveAction::create(['audit_finding_id' => $finding->id, 'action' => 'Fix the control']);
 
         $this->assertRejected(fn () => $finding->update(['finding_type' => 'observation']));
+        $this->assertRejected(fn () => $finding->fresh()->delete());
         $this->assertDatabaseHas('audit_findings', ['id' => $finding->id, 'finding_type' => 'nonconformity']);
     }
 
