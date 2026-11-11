@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\ActionItemResource;
+use App\Models\ActionItem;
 use App\Models\Audit;
 use App\Models\AuditChecklistItem;
 use App\Models\AuditFinding;
@@ -11,6 +13,7 @@ use App\Models\ManagementSystem;
 use App\Models\Standard;
 use App\Models\User;
 use App\Services\CorrectiveActionWorkflowService;
+use App\Services\ActionItemSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
@@ -27,6 +30,35 @@ class AutomaticAuditCapaIntegrationTest extends TestCase
         $system = ManagementSystem::create(['standard_id' => $standard->id, 'compliance_scope_id' => $scope->id, 'code' => 'SYS', 'name' => 'System']);
 
         return Audit::create(['management_system_id' => $system->id, 'code' => 'AUD-01', 'title' => 'Audit Internal']);
+    }
+
+    public function test_capa_verification_queue_is_visible_only_to_authorized_scope_reviewers(): void
+    {
+        $audit = $this->audit();
+        $reviewer = User::create(['name' => 'Authorized reviewer', 'email' => 'assigned-scope-verifier@example.test', 'password' => 'password']);
+        $unrelated = User::create(['name' => 'Unrelated reviewer', 'email' => 'unrelated-scope-verifier@example.test', 'password' => 'password']);
+        $worker = User::create(['name' => 'Worker', 'email' => 'scope-worker@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $reviewer->givePermissionTo('capa.verify');
+        $unrelated->givePermissionTo('capa.verify');
+        $audit->managementSystem->scope->update(['owner_id' => $reviewer->id]);
+
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-QUEUE',
+            'title' => 'Missing process', 'description' => 'Missing process',
+        ]);
+        $action = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Restore controls', 'owner_id' => $worker->id,
+        ]);
+        app(CorrectiveActionWorkflowService::class)->submitForVerification($action, $worker);
+        app(ActionItemSyncService::class)->sync();
+        $task = ActionItem::query()->where('category', 'capa_verification')->firstOrFail();
+
+        $this->actingAs($reviewer);
+        $this->assertContains($task->id, ActionItemResource::getEloquentQuery()->pluck('id')->all());
+
+        $this->actingAs($unrelated);
+        $this->assertNotContains($task->id, ActionItemResource::getEloquentQuery()->pluck('id')->all());
     }
 
     public function test_audit_completion_waits_for_reviewed_checklist_without_extra_fields(): void

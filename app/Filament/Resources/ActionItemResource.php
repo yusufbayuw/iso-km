@@ -31,7 +31,20 @@ class ActionItemResource extends Resource
         }
         $user = auth()->user();
         if (! $user?->can('action_item.view_all')) {
-            $query->where('owner_id', $user?->id);
+            $query->where(function (Builder $query) use ($user): void {
+                $query->where('owner_id', $user?->id);
+
+                // Verification is an unassigned team queue. Offer it only to
+                // authorized reviewers in scopes they are allowed to see.
+                if ($user?->can('capa.verify')) {
+                    $query->orWhere(function (Builder $shared) use ($user): void {
+                        $shared->whereNull('owner_id')
+                            ->where('category', 'capa_verification')
+                            ->whereHas('managementSystem.scope', fn (Builder $scope) => $scope
+                                ->whereNull('owner_id')->orWhere('owner_id', $user->id));
+                    });
+                }
+            });
         }
         return $query;
     }
