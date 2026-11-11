@@ -45,9 +45,12 @@ class GuidedConsolidationResource extends Resource
         ])->actions([
             Tables\Actions\Action::make('propose')->label('Usulkan Penilaian')->icon('heroicon-o-clipboard-document-check')
                 ->form([
-                    Forms\Components\Select::make('target_id')->label('Kriteria')->options(fn (GuidedConsolidation $record) =>
-                        GuidedQuestionTarget::query()->where('guided_question_id', $record->guided_question_id)->get()
-                            ->mapWithKeys(fn ($t) => [$t->id => '#'.$t->id.' - '.(string) $t->criterion])->all())->searchable()->required(),
+                    Forms\Components\Select::make('target_id')->label('Kriteria')
+                        ->options(fn (GuidedConsolidation $record): array => self::targetOptions($record))
+                        ->getSearchResultsUsing(fn (GuidedConsolidation $record, string $search): array => self::targetOptions($record, $search))
+                        ->getOptionLabelUsing(fn (GuidedConsolidation $record, $value): ?string =>
+                            self::targetOptions($record, ids: [$value])[$value] ?? null)
+                        ->searchable()->preload()->required(),
                     Forms\Components\Select::make('status')->label('Status Penilaian')->options([
                         'not_assessed' => 'Belum Dinilai', 'nonconformant' => 'Tidak Sesuai',
                         'partial' => 'Sebagian Sesuai', 'conformant' => 'Sesuai',
@@ -58,7 +61,11 @@ class GuidedConsolidationResource extends Resource
                     Forms\Components\Toggle::make('applicable')->label('Kontrol Diperlukan')->default(true)
                         ->helperText('Untuk status Tidak Berlaku, matikan toggle dan isi justifikasi.'),
                     Forms\Components\TextInput::make('risk_score')->label('Skor Risiko (1-25)')->numeric()->minValue(1)->maxValue(25)->required(),
-                    Forms\Components\Select::make('risk_owner_id')->label('Pemilik Risiko')->options(fn () => User::query()->pluck('name', 'id')->all())->searchable(),
+                    Forms\Components\Select::make('risk_owner_id')->label('Pemilik Risiko')
+                        ->options(fn (): array => self::riskOwnerOptions())
+                        ->getSearchResultsUsing(fn (string $search): array => self::riskOwnerOptions($search))
+                        ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('name'))
+                        ->searchable()->preload(),
                     Forms\Components\Textarea::make('rationale')->label('Dasar Penilaian')->required(),
                 ])->action(function (GuidedConsolidation $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->propose(
@@ -69,6 +76,27 @@ class GuidedConsolidationResource extends Resource
                     Notification::make()->success()->title('Usulan penilaian dibuat')->send();
                 }),
         ]);
+    }
+
+    private static function targetOptions(
+        GuidedConsolidation $record,
+        ?string $search = null,
+        ?array $ids = null
+    ): array {
+        return GuidedQuestionTarget::query()
+            ->where('guided_question_id', $record->guided_question_id)
+            ->when($ids !== null, fn (Builder $query) => $query->whereIn('id', $ids))
+            ->when(filled($search), fn (Builder $query) => $query->where('criterion', 'like', '%'.$search.'%'))
+            ->orderBy('id')->limit($ids === null ? 50 : max(1, count($ids)))->get()
+            ->mapWithKeys(fn (GuidedQuestionTarget $target) => [$target->id => '#'.$target->id.' - '.(string) $target->criterion])
+            ->all();
+    }
+
+    private static function riskOwnerOptions(?string $search = null): array
+    {
+        return User::query()
+            ->when(filled($search), fn (Builder $query) => $query->where('name', 'like', '%'.$search.'%'))
+            ->orderBy('name')->limit(50)->pluck('name', 'id')->all();
     }
 
     public static function getPages(): array { return ['index' => Pages\ListGuidedConsolidations::route('/')]; }

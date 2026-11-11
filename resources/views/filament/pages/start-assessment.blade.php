@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @if ($this->runs->isNotEmpty())
     <x-filament::section>
         <x-slot name="heading">Mulai / Lanjutkan Asesmen</x-slot>
         <x-slot name="description">
@@ -11,7 +12,7 @@
             @endif
 
             @if ($this->run && count($this->systems))
-                <div class="flex justify-end">
+                <div class="mt-4 flex justify-end">
                     <x-filament::button color="gray" icon="heroicon-o-plus" wire:click="newAssessment">
                         Asesmen Baru
                     </x-filament::button>
@@ -19,6 +20,7 @@
             @endif
         </div>
     </x-filament::section>
+    @endif
 
     @if (! $this->run)
         <x-filament::section>
@@ -28,11 +30,13 @@
             </x-slot>
 
             @if (count($this->systems))
-                <form wire:submit="start" class="space-y-5">
-                    {{ $this->startForm }}
+                <form wire:submit="start" class="space-y-6">
+                    <div class="pb-2">
+                        {{ $this->startForm }}
+                    </div>
 
                     @if ($this->bankReadiness)
-                        <div class="rounded-lg border p-4 {{ $this->bankReadiness['ready'] ? 'border-success-300 bg-success-50 dark:border-success-700 dark:bg-success-950/30' : 'border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950/30' }}">
+                        <div class="mt-6 rounded-lg border p-4 {{ $this->bankReadiness['ready'] ? 'border-success-300 bg-success-50 dark:border-success-700 dark:bg-success-950/30' : 'border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950/30' }}">
                             <div class="mb-2 flex flex-wrap items-center gap-2">
                                 <x-filament::badge :color="$this->bankReadiness['ready'] ? 'success' : 'warning'">
                                     {{ $this->bankReadiness['ready'] ? 'Bank Siap Digunakan' : 'Bank Belum Terbit' }}
@@ -58,10 +62,10 @@
                     @endif
 
                     @error('startData.system_id')
-                        <p class="text-sm text-danger-600 dark:text-danger-400" role="alert">{{ $message }}</p>
+                        <p class="mt-3 text-sm text-danger-600 dark:text-danger-400" role="alert">{{ $message }}</p>
                     @enderror
 
-                    <div class="flex flex-wrap items-center justify-end gap-3">
+                    <div class="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
                         <span wire:loading wire:target="start" class="text-sm text-gray-500 dark:text-gray-400" role="status">
                             Memeriksa bank dan membuat penugasan...
                         </span>
@@ -164,9 +168,9 @@
                     @if ($this->currentAssignment && ! $run->locked_at)
                         <x-filament::section>
                             <x-slot name="heading">Konteks Jawaban</x-slot>
-                            <form wire:submit="openContext" class="space-y-4">
+                            <form wire:submit="openContext" class="space-y-6">
                                 {{ $this->contextForm }}
-                                <div class="flex justify-end">
+                                <div class="mt-5 flex justify-end">
                                     <x-filament::button type="submit" color="gray" size="sm" icon="heroicon-o-folder-open">
                                         Buka Konteks
                                     </x-filament::button>
@@ -198,7 +202,32 @@
                                 {{ $this->answerForm }}
                             </div>
 
-                            <div class="mt-5 flex flex-wrap items-center gap-3">
+                            <div class="mt-6 space-y-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                                <div class="space-y-1">
+                                    <p class="text-sm font-semibold text-gray-950 dark:text-white">Tambahkan Bukti Pendukung</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        Pilih evidence dari daftar di atas, atau unggah file baru di sini.
+                                        Evidence baru otomatis dicatat pada register dan dihubungkan ke Requirement/Kontrol pertanyaan ini.
+                                    </p>
+                                </div>
+                                <div wire:key="wizard-evidence-upload-{{ $questionId }}-{{ md5($contextKey) }}">
+                                    {{ $this->uploadForm }}
+                                </div>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <x-filament::button type="button" color="gray" icon="heroicon-o-paper-clip"
+                                        wire:click="uploadEvidence" wire:loading.attr="disabled" wire:target="uploadEvidence">
+                                        Unggah &amp; Tautkan
+                                    </x-filament::button>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                        File disimpan privat. Status awal: Menunggu verifikasi.
+                                    </span>
+                                </div>
+                                @error('uploadData.files')
+                                    <p class="text-sm text-danger-600 dark:text-danger-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
                                 <x-filament::button color="gray" icon="heroicon-o-cloud-arrow-up" wire:click="saveDraft">
                                     Simpan Draft
                                 </x-filament::button>
@@ -236,9 +265,9 @@
                 </x-slot>
 
                 @if ($coordinator && ! $run->locked_at)
-                    <form wire:submit="saveScopeItem" class="space-y-4">
+                    <form wire:submit="saveScopeItem" class="space-y-6">
                         {{ $this->scopeForm }}
-                        <div class="flex justify-end">
+                        <div class="mt-5 flex justify-end">
                             <x-filament::button type="submit" icon="heroicon-o-plus">
                                 Tambah ke Inventaris
                             </x-filament::button>
@@ -301,9 +330,9 @@
                         <x-slot name="description">
                             Pilih pengguna yang memiliki izin menjawab, lalu tentukan pertanyaan atau tugaskan seluruh pertanyaan awal.
                         </x-slot>
-                        <form wire:submit="delegate" class="space-y-4">
+                        <form wire:submit="delegate" class="space-y-6">
                             {{ $this->delegateForm }}
-                            <div class="flex justify-end">
+                            <div class="mt-5 flex justify-end">
                                 <x-filament::button type="submit" icon="heroicon-o-user-plus">
                                     Tugaskan Kontributor
                                 </x-filament::button>

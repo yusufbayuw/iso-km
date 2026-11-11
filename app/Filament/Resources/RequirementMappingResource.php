@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class RequirementMappingResource extends Resource
 {
@@ -23,15 +24,35 @@ class RequirementMappingResource extends Resource
 
     public static function form(Form $form): Form
     {
-        $options = fn () => Requirement::query()->with('standard')->get()->sortBy(fn ($item) => ($item->standard?->code ?? '').' '.$item->code)->mapWithKeys(fn ($item) => [$item->id => trim(($item->standard?->code ?? '').' '.($item->standard?->edition ?? '')).' · '.$item->code.' — '.$item->title])->all();
         return $form->schema([
-            Forms\Components\Select::make('requirement_a_id')->label('Requirement A')->options($options)->searchable()->required()->disabled(fn (?RequirementMapping $record): bool => $record?->status === 'approved'),
-            Forms\Components\Select::make('requirement_b_id')->label('Requirement B')->options($options)->searchable()->required()->disabled(fn (?RequirementMapping $record): bool => $record?->status === 'approved'),
+            Forms\Components\Select::make('requirement_a_id')->label('Requirement A')->options(fn (): array => self::requirementOptions())->getSearchResultsUsing(fn (string $search): array => self::requirementOptions($search))->getOptionLabelUsing(fn ($value): ?string => self::selectedRequirementLabel($value))->searchable()->preload()->required()->disabled(fn (?RequirementMapping $record): bool => $record?->status === 'approved'),
+            Forms\Components\Select::make('requirement_b_id')->label('Requirement B')->options(fn (): array => self::requirementOptions())->getSearchResultsUsing(fn (string $search): array => self::requirementOptions($search))->getOptionLabelUsing(fn ($value): ?string => self::selectedRequirementLabel($value))->searchable()->preload()->required()->disabled(fn (?RequirementMapping $record): bool => $record?->status === 'approved'),
             Forms\Components\Select::make('mapping_type')->label('Mapping')->options(['equivalent' => 'Equivalent','partial' => 'Partial','supporting' => 'Supporting','related' => 'Related'])->required()->default('related'),
             Forms\Components\TextInput::make('coverage_percent')->label('Coverage (%)')->numeric()->minValue(1)->maxValue(100)->required()->default(50),
             Forms\Components\Placeholder::make('status_display')->label('Status')->content(fn (?RequirementMapping $record): string => $record?->status ?? 'draft'),
             Forms\Components\Textarea::make('rationale')->label('Rationale / Batas Reuse')->columnSpanFull(),
         ])->columns(2);
+    }
+
+    private static function requirementOptions(?string $search = null): array
+    {
+        return Requirement::query()->with('standard')
+            ->when(filled($search), fn (Builder $query) => $query->where(fn (Builder $query) =>
+                $query->where('code', 'like', '%'.$search.'%')->orWhere('title', 'like', '%'.$search.'%')
+                    ->orWhereHas('standard', fn (Builder $standard) => $standard->where('code', 'like', '%'.$search.'%'))))
+            ->orderBy('standard_id')->orderBy('code')->limit(50)->get()
+            ->mapWithKeys(fn (Requirement $item) => [$item->id => self::requirementLabel($item)])->all();
+    }
+
+    private static function selectedRequirementLabel($value): ?string
+    {
+        $item = Requirement::query()->with('standard')->find($value);
+        return $item ? self::requirementLabel($item) : null;
+    }
+
+    private static function requirementLabel(Requirement $item): string
+    {
+        return trim(($item->standard?->code ?? '').' '.($item->standard?->edition ?? '')).' · '.$item->code.' — '.$item->title;
     }
 
     public static function table(Table $table): Table

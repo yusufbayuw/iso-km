@@ -91,8 +91,10 @@ class GuidedAssessmentResource extends Resource
                 ->visible(fn (GuidedAssessment $record) => self::canEdit($record))
                 ->form([
                     Forms\Components\Select::make('user_id')->label('Responden')
-                        ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id')->all())
-                        ->searchable()->required(),
+                        ->options(fn (): array => self::userOptions())
+                        ->getSearchResultsUsing(fn (string $search): array => self::userOptions($search))
+                        ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('name'))
+                        ->searchable()->preload()->required(),
                 ])->action(function (GuidedAssessment $record, array $data): void {
                     $count = app(GuidedQuestionBranchingService::class)->assignRoots(
                         $record, User::findOrFail($data['user_id']), auth()->user()
@@ -116,11 +118,10 @@ class GuidedAssessmentResource extends Resource
                 ->visible(fn (GuidedAssessment $record) => $record->isMember(auth()->user(), ['coordinator'])
                     && (auth()->user()?->can('guided.report.export') ?? false))
                 ->form([
-                    Forms\Components\Select::make('template_id')->label('Template Ekspor')->required()->searchable()
-                        ->options(fn (GuidedAssessment $record) => GuidedExportTemplate::query()
-                            ->where('is_active', true)
-                            ->where(fn ($q) => $q->whereNull('management_system_id')->orWhere('management_system_id', $record->management_system_id))
-                            ->pluck('name', 'id')->all()),
+                    Forms\Components\Select::make('template_id')->label('Template Ekspor')->required()->searchable()->preload()
+                        ->options(fn (GuidedAssessment $record): array => self::templateOptions($record))
+                        ->getSearchResultsUsing(fn (GuidedAssessment $record, string $search): array => self::templateOptions($record, $search))
+                        ->getOptionLabelUsing(fn (GuidedAssessment $record, $value): ?string => self::templateQuery($record)->whereKey($value)->value('name')),
                 ])->action(function (GuidedAssessment $record, array $data) {
                     $path = app(GuidedWorkbookExportService::class)->export(
                         $record, GuidedExportTemplate::findOrFail($data['template_id']), auth()->user(),
@@ -131,8 +132,16 @@ class GuidedAssessmentResource extends Resource
             Tables\Actions\Action::make('assign')->label('Tugaskan')->icon('heroicon-o-user-plus')
                 ->visible(fn (GuidedAssessment $record) => self::canEdit($record))
                 ->form([
-                    Forms\Components\Select::make('question_id')->label('Pertanyaan')->options(fn (GuidedAssessment $record) => $record->bank->questions()->pluck('prompt', 'id')->all())->searchable()->required(),
-                    Forms\Components\Select::make('user_id')->label('Responden')->options(fn () => User::query()->orderBy('name')->pluck('name', 'id')->all())->searchable()->required(),
+                    Forms\Components\Select::make('question_id')->label('Pertanyaan')
+                        ->options(fn (GuidedAssessment $record): array => self::questionOptions($record))
+                        ->getSearchResultsUsing(fn (GuidedAssessment $record, string $search): array => self::questionOptions($record, $search))
+                        ->getOptionLabelUsing(fn (GuidedAssessment $record, $value): ?string => $record->bank->questions()->whereKey($value)->value('prompt'))
+                        ->searchable()->preload()->required(),
+                    Forms\Components\Select::make('user_id')->label('Responden')
+                        ->options(fn (): array => self::userOptions())
+                        ->getSearchResultsUsing(fn (string $search): array => self::userOptions($search))
+                        ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('name'))
+                        ->searchable()->preload()->required(),
                     Forms\Components\DatePicker::make('due_at')->label('Target Selesai'),
                 ])->action(function (GuidedAssessment $record, array $data): void {
                     app(GuidedAssessmentWorkflowService::class)->assign($record, GuidedQuestion::findOrFail($data['question_id']), User::findOrFail($data['user_id']), auth()->user(), $data['due_at'] ?? null);
@@ -146,6 +155,35 @@ class GuidedAssessmentResource extends Resource
                 }),
             Tables\Actions\EditAction::make(),
         ]);
+    }
+
+    private static function userOptions(?string $search = null): array
+    {
+        return User::query()
+            ->when(filled($search), fn (Builder $query) => $query->where('name', 'like', '%'.$search.'%'))
+            ->orderBy('name')->limit(50)->pluck('name', 'id')->all();
+    }
+
+    private static function templateQuery(GuidedAssessment $assessment): Builder
+    {
+        return GuidedExportTemplate::query()->where('is_active', true)
+            ->where(fn (Builder $query) => $query->whereNull('management_system_id')
+                ->orWhere('management_system_id', $assessment->management_system_id));
+    }
+
+    private static function templateOptions(GuidedAssessment $assessment, ?string $search = null): array
+    {
+        return self::templateQuery($assessment)
+            ->when(filled($search), fn (Builder $query) => $query->where('name', 'like', '%'.$search.'%'))
+            ->orderBy('name')->limit(50)->pluck('name', 'id')->all();
+    }
+
+    private static function questionOptions(GuidedAssessment $assessment, ?string $search = null): array
+    {
+        return $assessment->bank->questions()
+            ->when(filled($search), fn (Builder $query) => $query->where(fn (Builder $query) => $query
+                ->where('code', 'like', '%'.$search.'%')->orWhere('prompt', 'like', '%'.$search.'%')))
+            ->orderBy('sort_order')->limit(50)->pluck('prompt', 'id')->all();
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageGuidedAssessments::route('/')]; }

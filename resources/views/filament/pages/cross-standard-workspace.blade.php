@@ -5,13 +5,7 @@
                 <div class="text-sm font-medium">Target Management System</div>
                 <div class="mt-1 text-xs text-gray-500">Sistem mencari verified evidence dari standar lain pada compliance scope yang sama melalui mapping yang sudah approved.</div>
             </div>
-            <x-filament::input.wrapper>
-                <x-filament::input.select wire:model.live="managementSystemId">
-                    @foreach ($systems as $system)
-                        <option value="{{ $system->id }}">{{ $system->code }} — {{ $system->standard?->code }} — {{ $system->name }}</option>
-                    @endforeach
-                </x-filament::input.select>
-            </x-filament::input.wrapper>
+            {{ $this->managementSystemForm }}
         </div>
     </x-filament::section>
 
