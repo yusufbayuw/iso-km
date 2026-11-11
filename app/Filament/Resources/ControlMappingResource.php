@@ -12,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ControlMappingResource extends Resource
 {
@@ -23,15 +24,35 @@ class ControlMappingResource extends Resource
 
     public static function form(Form $form): Form
     {
-        $options = fn () => Control::query()->with('standard')->assessable()->get()->sortBy(fn ($item) => ($item->standard?->code ?? '').' '.$item->code)->mapWithKeys(fn ($item) => [$item->id => trim(($item->standard?->code ?? '').' '.($item->standard?->edition ?? '')).' · '.$item->code.' — '.$item->title])->all();
         return $form->schema([
-            Forms\Components\Select::make('control_a_id')->label('Control A')->options($options)->searchable()->required()->disabled(fn (?ControlMapping $record): bool => $record?->status === 'approved'),
-            Forms\Components\Select::make('control_b_id')->label('Control B')->options($options)->searchable()->required()->disabled(fn (?ControlMapping $record): bool => $record?->status === 'approved'),
+            Forms\Components\Select::make('control_a_id')->label('Control A')->options(fn (): array => self::controlOptions())->getSearchResultsUsing(fn (string $search): array => self::controlOptions($search))->getOptionLabelUsing(fn ($value): ?string => self::selectedControlLabel($value))->searchable()->preload()->required()->disabled(fn (?ControlMapping $record): bool => $record?->status === 'approved'),
+            Forms\Components\Select::make('control_b_id')->label('Control B')->options(fn (): array => self::controlOptions())->getSearchResultsUsing(fn (string $search): array => self::controlOptions($search))->getOptionLabelUsing(fn ($value): ?string => self::selectedControlLabel($value))->searchable()->preload()->required()->disabled(fn (?ControlMapping $record): bool => $record?->status === 'approved'),
             Forms\Components\Select::make('mapping_type')->label('Mapping')->options(['equivalent' => 'Equivalent','partial' => 'Partial','supporting' => 'Supporting','related' => 'Related'])->required()->default('related'),
             Forms\Components\TextInput::make('coverage_percent')->label('Coverage (%)')->numeric()->minValue(1)->maxValue(100)->required()->default(50),
             Forms\Components\Placeholder::make('status_display')->label('Status')->content(fn (?ControlMapping $record): string => $record?->status ?? 'draft'),
             Forms\Components\Textarea::make('rationale')->label('Rationale / Batas Reuse')->columnSpanFull(),
         ])->columns(2);
+    }
+
+    private static function controlOptions(?string $search = null): array
+    {
+        return Control::query()->with('standard')->assessable()
+            ->when(filled($search), fn (Builder $query) => $query->where(fn (Builder $query) =>
+                $query->where('code', 'like', '%'.$search.'%')->orWhere('title', 'like', '%'.$search.'%')
+                    ->orWhereHas('standard', fn (Builder $standard) => $standard->where('code', 'like', '%'.$search.'%'))))
+            ->orderBy('standard_id')->orderBy('code')->limit(50)->get()
+            ->mapWithKeys(fn (Control $item) => [$item->id => self::controlLabel($item)])->all();
+    }
+
+    private static function selectedControlLabel($value): ?string
+    {
+        $item = Control::query()->with('standard')->assessable()->find($value);
+        return $item ? self::controlLabel($item) : null;
+    }
+
+    private static function controlLabel(Control $item): string
+    {
+        return trim(($item->standard?->code ?? '').' '.($item->standard?->edition ?? '')).' · '.$item->code.' — '.$item->title;
     }
 
     public static function table(Table $table): Table
