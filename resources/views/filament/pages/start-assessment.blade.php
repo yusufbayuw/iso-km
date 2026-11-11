@@ -269,6 +269,10 @@
                             <button type="button" class="gw-btn gw-primary" wire:click="downloadWorkbook">
                                 {{ $run->locked_at ? 'Unduh GAP Analysis FINAL (.xlsx)' : 'Unduh GAP Analysis DRAFT (.xlsx)' }}
                             </button>
+                            <a target="_blank" rel="noopener" class="gw-btn"
+                               href="{{ route('guided.assessment.print', ['assessment' => $run->id]) }}">
+                                Laporan Cetak / Simpan PDF
+                            </a>
                         </div>
                     @else
                         <p class="gw-soft">Unduhan laporan memerlukan kewenangan koordinator dan izin ekspor.</p>
