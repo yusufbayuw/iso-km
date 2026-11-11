@@ -131,6 +131,33 @@ class GuidedEvidenceUploadTest extends TestCase
         $this->assertDatabaseCount('evidences', 1);
     }
 
+    public function test_native_wizard_upload_action_creates_and_selects_evidence_once(): void
+    {
+        extract($this->fixture());
+        foreach (['guided.assessment.view', 'portal.access'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+        $actor->givePermissionTo(['guided.assessment.view', 'portal.access']);
+
+        $page = \Livewire\Livewire::test(\App\Filament\Pages\StartAssessment::class)
+            ->assertSee('Unggah bukti baru')
+            ->set('uploadData.files', [
+                UploadedFile::fake()->create('wizard.pdf', 10, 'application/pdf'),
+            ])
+            ->call('uploadEvidence')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseCount('evidences', 1);
+        $evidence = Evidence::query()->firstOrFail();
+        $this->assertContains($evidence->id, $page->get('answerData')['evidence_ids'] ?? []);
+        $page->call('saveDraft')->assertHasNoErrors();
+        $this->assertDatabaseCount('evidences', 1);
+
+        $draft = \App\Models\GuidedAnswerDraft::query()
+            ->where('guided_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertSame([$evidence->id], $draft->evidence_ids);
+    }
+
     public function test_invalid_file_is_rejected_without_creating_evidence(): void
     {
         extract($this->fixture());
