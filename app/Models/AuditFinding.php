@@ -21,7 +21,7 @@ class AuditFinding extends Model
             $systemId = $integrity->auditSystemId($finding->audit_id);
             $integrity->assertCatalogItem($systemId, $finding->requirement_id, 'requirement');
             $integrity->assertCatalogItem($systemId, $finding->control_id, 'control');
-            if ($finding->status === 'closed' && $finding->isDirty('status') && $finding->exists) {
+            if ($finding->status === 'closed' && ($finding->isDirty('status') || ! $finding->exists)) {
                 app(CorrectiveActionWorkflowService::class)->assertCanClose($finding);
             }
         });

@@ -45,12 +45,9 @@ class AuditFindingResource extends Resource
                 Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),
                 Forms\Components\DatePicker::make('due_date')->label('Due Date')->native(false),
                 Forms\Components\Select::make('status')->label('Status')->options(['open' => 'Open','in_progress' => 'In Progress','verification' => 'Verification','completed' => 'Completed'])->required()->default('open'),
-                Forms\Components\DateTimePicker::make('completed_at')->label('Completed At')->seconds(false),
-                Forms\Components\Select::make('verified_by')->label('Verified By')->relationship('verifier', 'name')->searchable()->preload(),
-                Forms\Components\DateTimePicker::make('verified_at')->label('Verified At')->seconds(false),
-                Forms\Components\Textarea::make('verification_notes')->label('Verification Notes')->columnSpanFull(),
-                Forms\Components\Select::make('effectiveness_status')->label('Efektivitas')->options(['pending' => 'Pending','effective' => 'Effective','ineffective' => 'Ineffective'])->required()->default('pending'),
-                Forms\Components\Textarea::make('effectiveness_notes')->label('Effectiveness Notes')->columnSpanFull(),
+                Forms\Components\Placeholder::make('verification_hint')->label('Verifikasi')
+                    ->content('Gunakan aksi Verifikasi Efektivitas pada CAPA Tracker setelah pekerjaan selesai.')
+                    ->columnSpanFull(),
             ])->columns(2)->columnSpanFull()->collapsible(),
         ])->columns(2);
     }
@@ -67,7 +64,7 @@ class AuditFindingResource extends Resource
             Tables\Columns\TextColumn::make('due_date')->label('Due')->date('d/m/Y')->placeholder('-'),
             Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
             Tables\Columns\TextColumn::make('corrective_actions_count')->label('CAPA')->counts('correctiveActions')->alignCenter(),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([Tables\Actions\EditAction::make()]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageAuditFindings::route('/')]; }

@@ -27,6 +27,12 @@ class CorrectiveAction extends Model
                 }
             }
         });
+        static::saving(function (self $action): void {
+            if ($action->exists && $action->status === 'completed'
+                && $action->isDirty(['action', 'owner_id', 'due_date', 'audit_finding_id'])) {
+                throw ValidationException::withMessages(['status' => 'CAPA terverifikasi tidak dapat diubah; buat tindakan baru jika perlu revisi.']);
+            }
+        });
         static::saved(function (self $action): void {
             if ($action->audit_finding_id) {
                 app(CorrectiveActionWorkflowService::class)->syncFinding($action->finding);
