@@ -30,6 +30,13 @@ class AuditFinding extends Model
                 app(CorrectiveActionWorkflowService::class)->assertCanClose($finding);
             }
         });
+        static::deleting(function (self $finding): void {
+            if ($finding->correctiveActions()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'audit_finding_id' => 'Temuan yang sudah mempunyai CAPA tidak dapat dihapus. Histori audit harus dipertahankan.',
+                ]);
+            }
+        });
         static::saved(function (self $finding): void {
             // Reconcile even when a stale Eloquent instance is saved after CAPA
             // transitions; no status update happens when it is already correct.
