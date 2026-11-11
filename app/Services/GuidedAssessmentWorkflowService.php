@@ -419,6 +419,10 @@ class GuidedAssessmentWorkflowService
             if ($run->assignments()->whereNotIn('status', ['submitted', 'skipped'])->exists() || ! $run->assignments()->exists()) {
                 throw ValidationException::withMessages(['assessment' => 'Seluruh penugasan wajib diselesaikan sebelum finalisasi.']);
             }
+            if (app(GuidedWizardCompletenessService::class)->report($run)['draft_contexts_pending'] > 0) {
+                throw ValidationException::withMessages(['assessment' =>
+                    'Masih ada draft untuk konteks atau aset lain yang belum dikirim.']);
+            }
             $activeDecisions = GuidedDecision::query()->whereHas('consolidation', fn ($q) =>
                 $q->where('guided_assessment_id', $run->id)->where('is_current', true))->with('target')->get();
             foreach ($activeDecisions as $decision) { $this->assertRiskCurrent($decision, $run); }
