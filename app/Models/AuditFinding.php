@@ -6,7 +6,6 @@ use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use App\Services\ManagementSystemIntegrityService;
 use App\Services\CorrectiveActionWorkflowService;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -26,9 +25,9 @@ class AuditFinding extends Model
             }
         });
         static::saved(function (self $finding): void {
-            if ($finding->wasChanged('root_cause')) {
-                app(CorrectiveActionWorkflowService::class)->syncFinding($finding);
-            }
+            // Reconcile even when a stale Eloquent instance is saved after CAPA
+            // transitions; no status update happens when it is already correct.
+            app(CorrectiveActionWorkflowService::class)->syncFinding($finding);
         });
     }
 
