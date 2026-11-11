@@ -39,10 +39,10 @@ class GuidedScopeItemResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('guided_assessment_id')->label('Periode Asesmen')->required()
-                ->options(fn () => GuidedAssessment::query()->whereNull('locked_at')
-                    ->whereHas('memberships', fn ($q) => $q->where('user_id', auth()->id())->where('role', 'coordinator'))
-                    ->orderBy('name')->pluck('name', 'id')->all())
-                ->searchable()->disabledOn('edit'),
+                ->options(fn (): array => self::assessmentOptions())
+                ->getSearchResultsUsing(fn (string $search): array => self::assessmentOptions($search))
+                ->getOptionLabelUsing(fn ($value): ?string => self::selectableAssessmentQuery()->whereKey($value)->value('name'))
+                ->searchable()->preload()->disabledOn('edit'),
             Forms\Components\Select::make('kind')->label('Jenis Data')->required()
                 ->options(['asset' => 'Aset Informasi', 'activity' => 'Aktivitas Informasi']),
             Forms\Components\TextInput::make('category')->label('Kelompok/Kategori')->maxLength(255),
@@ -58,6 +58,20 @@ class GuidedScopeItemResource extends Resource
             Forms\Components\Textarea::make('notes')->label('Catatan dan Dasar Informasi')->columnSpanFull(),
             Forms\Components\Hidden::make('created_by')->default(fn () => auth()->id()),
         ])->columns(2);
+    }
+
+    private static function selectableAssessmentQuery(): Builder
+    {
+        return GuidedAssessment::query()->whereNull('locked_at')
+            ->whereHas('memberships', fn (Builder $query) => $query
+                ->where('user_id', auth()->id())->where('role', 'coordinator'));
+    }
+
+    private static function assessmentOptions(?string $search = null): array
+    {
+        return self::selectableAssessmentQuery()
+            ->when(filled($search), fn (Builder $query) => $query->where('name', 'like', '%'.$search.'%'))
+            ->orderBy('name')->limit(50)->pluck('name', 'id')->all();
     }
 
     public static function table(Table $table): Table
