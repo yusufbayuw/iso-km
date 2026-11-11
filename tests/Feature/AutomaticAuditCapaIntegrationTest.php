@@ -29,6 +29,20 @@ class AutomaticAuditCapaIntegrationTest extends TestCase
         return Audit::create(['management_system_id' => $system->id, 'code' => 'AUD-01', 'title' => 'Audit Internal']);
     }
 
+    public function test_audit_completion_waits_for_reviewed_checklist_without_extra_fields(): void
+    {
+        $audit = $this->audit();
+        $item = AuditChecklistItem::create([
+            'audit_id' => $audit->id, 'question' => 'Review compliance evidence',
+            'result' => 'not_reviewed',
+        ]);
+        $this->assertRejected(fn () => $audit->update(['status' => 'completed']));
+        $item->update(['result' => 'conforming']);
+        $audit->refresh()->update(['status' => 'completed']);
+        $this->assertSame('completed', $audit->fresh()->status);
+        $this->assertNotNull($audit->fresh()->actual_end_at);
+    }
+
     public function test_checklist_creates_one_finding_without_extra_user_action(): void
     {
         $audit = $this->audit();
