@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class GuidedQuestionResource extends Resource
 {
@@ -26,7 +27,7 @@ class GuidedQuestionResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('guided_question_bank_id')->label('Bank Pertanyaan')->relationship('bank', 'name', modifyQueryUsing: fn ($q) => $q->where('status', 'draft'))->required()->searchable()->preload()->disabledOn('edit'),
+            Forms\Components\Select::make('guided_question_bank_id')->label('Bank Pertanyaan')->relationship('bank', 'name', modifyQueryUsing: fn (Builder $query) => $query->where('status', 'draft'))->required()->searchable()->preload()->disabledOn('edit'),
             Forms\Components\TextInput::make('code')->label('Kode')->required()->maxLength(100)->disabledOn('edit'),
             Forms\Components\TextInput::make('sort_order')->label('Urutan')->numeric()->default(0),
             Forms\Components\Toggle::make('is_required')->label('Wajib')->default(true),
@@ -41,7 +42,7 @@ class GuidedQuestionResource extends Resource
             ])->columnSpanFull(),
             Forms\Components\Repeater::make('targets')->label('Kriteria Penilaian')->relationship()->schema([
                 Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title')->searchable()->preload(),
-                Forms\Components\Select::make('control_id')->label('Kontrol')->relationship('control', 'title', modifyQueryUsing: fn ($q) => $q->where('is_group', false))->searchable()->preload(),
+                Forms\Components\Select::make('control_id')->label('Kontrol')->relationship('control', 'title', modifyQueryUsing: fn (Builder $query) => $query->where('is_group', false))->searchable()->preload(),
                 Forms\Components\Textarea::make('criterion')->label('Yang harus dibuktikan')->required()->columnSpanFull(),
                 Forms\Components\Select::make('evidence_profile')->label('Profil Evidence')->options(['basic' => 'Dasar','standard' => 'Ditingkatkan','critical' => 'Kritis'])->default('standard')->required(),
                 Forms\Components\TagsInput::make('evidence_hints')->label('Contoh Evidence')->columnSpanFull(),
