@@ -171,6 +171,49 @@ class GuidedWizardIntegrationTest extends TestCase
             ->assertOk()->assertSee('DRAFT')->assertSee('Rendered assessment');
     }
 
+    public function test_native_forms_can_start_a_run_save_a_draft_and_submit(): void
+    {
+        extract($this->prepare());
+        Permission::findOrCreate('portal.access', 'web');
+        $actor->givePermissionTo('portal.access');
+
+        $page = \Livewire\Livewire::test(StartAssessment::class);
+        $page->assertSee('Sistem manajemen yang dinilai')
+            ->assertSee('Nama asesmen')
+            ->assertSee('Mulai Asesmen')
+            ->fillForm([
+                'system_id' => $system->id,
+                'name' => 'Native form assessment',
+            ], 'startForm')
+            ->call('start')
+            ->assertHasNoFormErrors([], 'startForm')
+            ->assertSee('Native form assessment')
+            ->assertSee('Pilih pertanyaan');
+
+        $run = \App\Models\GuidedAssessment::query()->where('name', 'Native form assessment')->firstOrFail();
+        $assignment = $run->assignments()->whereHas('question', fn ($query) =>
+            $query->where('code', 'REQ-4.1'))->firstOrFail();
+
+        $page->call('chooseQuestion', $assignment->guided_question_id)
+            ->fillForm([
+                'value' => 'Diterapkan Sebagian',
+                'notes' => 'Native form response',
+            ], 'answerForm')
+            ->call('saveDraft');
+
+        $this->assertDatabaseHas('guided_answer_drafts', [
+            'guided_assignment_id' => $assignment->id,
+            'respondent_id' => $actor->id,
+            'context_key' => 'general',
+        ]);
+
+        $page->call('submitAnswer');
+        $this->assertDatabaseHas('guided_answers', [
+            'guided_assignment_id' => $assignment->id,
+            'respondent_id' => $actor->id,
+        ]);
+    }
+
     public function test_wizard_respects_default_off_and_system_ownership(): void
     {
         extract($this->prepare());
