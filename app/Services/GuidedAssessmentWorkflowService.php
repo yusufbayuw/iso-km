@@ -419,7 +419,10 @@ class GuidedAssessmentWorkflowService
             if ($run->assignments()->whereNotIn('status', ['submitted', 'skipped'])->exists() || ! $run->assignments()->exists()) {
                 throw ValidationException::withMessages(['assessment' => 'Seluruh penugasan wajib diselesaikan sebelum finalisasi.']);
             }
-            if (app(GuidedWizardCompletenessService::class)->report($run)['draft_contexts_pending'] > 0) {
+            // A disabled wizard must not change the legacy lock flow or
+            // query its additive table before the deployment runs migrations.
+            if (config('iso-km.guided_wizard_enabled', false)
+                && app(GuidedWizardCompletenessService::class)->report($run)['draft_contexts_pending'] > 0) {
                 throw ValidationException::withMessages(['assessment' =>
                     'Masih ada draft untuk konteks atau aset lain yang belum dikirim.']);
             }
