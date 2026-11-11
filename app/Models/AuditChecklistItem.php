@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Services\ManagementSystemIntegrityService;
+use App\Services\AuditFindingAutomationService;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AuditChecklistItem extends Model
@@ -17,6 +18,7 @@ class AuditChecklistItem extends Model
             $integrity->assertCatalogItem($systemId, $item->control_id, 'control');
             $integrity->assertEvidence($systemId, $item->evidence_id);
         });
+        static::saved(fn (self $item) => app(AuditFindingAutomationService::class)->fromChecklist($item));
     }
 
     protected $fillable = ['audit_id','requirement_id','control_id','question','result','notes','evidence_id','sort_order'];
