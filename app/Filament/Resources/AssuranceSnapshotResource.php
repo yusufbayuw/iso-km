@@ -11,6 +11,8 @@ use Filament\Tables\Table;
 
 class AssuranceSnapshotResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = AssuranceSnapshot::class;
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar-square';
     protected static ?string $navigationGroup = 'Assurance';

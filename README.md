@@ -473,6 +473,10 @@ Jika belum ada pengguna dengan role super_admin, tetapkan **ID akun yang sah** s
 
 Tidak ada akun admin atau kata sandi default yang otomatis ditambahkan. Jangan gunakan migrate:fresh, shield:install --fresh, atau shield:generate --all di production; generator dapat menimpa policy kustom.
 
+### Integrasi operasional otomatis
+
+Proses assessment/SoA, Audit-Finding-CAPA, My Work, evidence reuse, dan Management Review kini memiliki otomatisasi tanpa menu baru. Detail deployment, pengaman, dan batasan berada pada [dokumen integrasi otomatis](docs/AUTOMATIC_INTEGRATION.md).
+
 ### Upgrade existing environment
 
 ```bash

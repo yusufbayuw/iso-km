@@ -6,12 +6,16 @@ use App\Filament\Resources\AuditResource\Pages;
 use App\Models\Audit;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class AuditResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Audit::class;
     protected static ?string $navigationIcon = 'heroicon-o-magnifying-glass-circle';
     protected static ?string $navigationGroup = 'Audit & Improvement';
@@ -22,7 +26,7 @@ class AuditResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->live()->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode Audit')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Judul Audit')->required()->columnSpanFull(),
             Forms\Components\Select::make('type')->label('Jenis')->options(['internal' => 'Internal','external' => 'Eksternal','supplier' => 'Supplier'])->required()->default('internal'),
@@ -32,8 +36,10 @@ class AuditResource extends Resource
             Forms\Components\DateTimePicker::make('planned_end_at')->label('Rencana Selesai')->seconds(false),
             Forms\Components\DateTimePicker::make('actual_start_at')->label('Aktual Mulai')->seconds(false),
             Forms\Components\DateTimePicker::make('actual_end_at')->label('Aktual Selesai')->seconds(false),
-            Forms\Components\Select::make('requirements')->label('Requirement yang Diaudit')->relationship('requirements', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
-            Forms\Components\Select::make('controls')->label('Control yang Diaudit')->relationship('controls', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('requirements')->label('Requirement yang Diaudit')->relationship('requirements', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('controls')->label('Control yang Diaudit')->relationship('controls', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Textarea::make('scope')->label('Scope Audit')->columnSpanFull(),
             Forms\Components\Textarea::make('objectives')->label('Tujuan Audit')->columnSpanFull(),
             Forms\Components\Textarea::make('criteria')->label('Kriteria Audit')->columnSpanFull(),
@@ -61,7 +67,7 @@ class AuditResource extends Resource
             Tables\Columns\TextColumn::make('leadAuditor.name')->label('Lead Auditor')->placeholder('-'),
             Tables\Columns\TextColumn::make('planned_start_at')->label('Jadwal')->dateTime('d/m/Y H:i')->placeholder('-'),
             Tables\Columns\TextColumn::make('findings_count')->label('Finding')->counts('findings')->alignCenter(),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()->visible(fn (Audit $record): bool => ! $record->checklistItems()->exists() && ! $record->findings()->exists())]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageAudits::route('/')]; }

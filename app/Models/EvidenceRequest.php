@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EvidenceRequest extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected $fillable = ['evidence_schedule_id', 'management_system_id', 'owner_id', 'evidence_id', 'verified_by', 'due_at', 'period_start', 'period_end', 'period_label', 'status', 'requested_at', 'submitted_at', 'verified_at', 'verification_notes'];

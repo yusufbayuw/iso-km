@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 Schedule::command('iso:refresh-intelligence')
-    ->dailyAt('07:00')
+    ->everyThirtyMinutes()
     ->withoutOverlapping()
     ->onOneServer();
 

@@ -15,6 +15,8 @@ use Filament\Tables\Table;
 
 class TrainingAssignmentResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = TrainingAssignment::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'People & Competence';

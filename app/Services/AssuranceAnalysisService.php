@@ -8,6 +8,7 @@ use App\Models\Audit;
 use App\Models\AuditFinding;
 use App\Models\CompetencyRecord;
 use App\Models\Evidence;
+use App\Models\EvidenceReuse;
 use App\Models\ManagementSystem;
 use App\Models\RequirementAssessment;
 use App\Models\Risk;
@@ -50,14 +51,29 @@ class AssuranceAnalysisService
                 $query->whereNull('expires_at')->orWhereDate('expires_at', '>=', today());
             });
 
-        $coveredControlIds = (clone $verifiedEvidence)
+        $directControlIds = (clone $verifiedEvidence)
             ->whereHas('controls', fn ($query) => $query->whereIn('controls.id', $applicableControls))
             ->with('controls:id')
             ->get()
             ->flatMap(fn (Evidence $evidence) => $evidence->controls->pluck('id'))
             ->intersect($applicableControls)
-            ->unique()
-            ->count();
+            ->unique();
+
+        // Count accepted, still-valid reuse for the target control without copying
+        // the evidence or inflating coverage when direct and reused links overlap.
+        $reusedControlIds = EvidenceReuse::query()
+            ->where('target_management_system_id', $system->id)
+            ->where('status', 'accepted')
+            ->whereIn('target_control_id', $applicableControls)
+            ->whereHas('controlMapping', fn ($query) => $query->where('status', 'approved'))
+            ->whereHas('evidence', fn ($query) => $query
+                ->where('status', 'active')
+                ->where('verification_status', 'verified')
+                ->where(fn ($q) => $q->whereNull('valid_from')->orWhereDate('valid_from', '<=', today()))
+                ->where(fn ($q) => $q->whereNull('expires_at')->orWhereDate('expires_at', '>=', today())))
+            ->pluck('target_control_id');
+
+        $coveredControlIds = $directControlIds->merge($reusedControlIds)->unique()->count();
         $evidenceCoverage = $this->percent($coveredControlIds, $applicableTotal);
 
         $allEvidence = Evidence::query()->where('management_system_id', $system->id)->where('status', '!=', 'archived');

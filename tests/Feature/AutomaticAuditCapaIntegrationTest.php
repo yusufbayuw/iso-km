@@ -1,0 +1,330 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Filament\Resources\ActionItemResource;
+use App\Filament\Resources\CorrectiveActionResource;
+use App\Models\ActionItem;
+use App\Models\Audit;
+use App\Models\AuditChecklistItem;
+use App\Models\AuditFinding;
+use App\Models\ComplianceScope;
+use App\Models\CorrectiveAction;
+use App\Models\ManagementSystem;
+use App\Models\Standard;
+use App\Models\User;
+use App\Services\CorrectiveActionWorkflowService;
+use Database\Seeders\IsoRolePermissionSeeder;
+use App\Services\ActionItemSyncService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Permission;
+use Tests\TestCase;
+
+class AutomaticAuditCapaIntegrationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function audit(): Audit
+    {
+        $standard = Standard::create(['code' => 'ISMS', 'name' => 'Example Standard']);
+        $scope = ComplianceScope::create(['code' => 'ORG', 'name' => 'Organization']);
+        $system = ManagementSystem::create(['standard_id' => $standard->id, 'compliance_scope_id' => $scope->id, 'code' => 'SYS', 'name' => 'System']);
+
+        return Audit::create(['management_system_id' => $system->id, 'code' => 'AUD-01', 'title' => 'Audit Internal']);
+    }
+
+    public function test_capa_verification_queue_is_visible_only_to_authorized_scope_reviewers(): void
+    {
+        $audit = $this->audit();
+        $reviewer = User::create(['name' => 'Authorized reviewer', 'email' => 'assigned-scope-verifier@example.test', 'password' => 'password']);
+        $unrelated = User::create(['name' => 'Unrelated reviewer', 'email' => 'unrelated-scope-verifier@example.test', 'password' => 'password']);
+        $worker = User::create(['name' => 'Worker', 'email' => 'scope-worker@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $reviewer->givePermissionTo('capa.verify');
+        $unrelated->givePermissionTo('capa.verify');
+        $audit->managementSystem->scope->update(['owner_id' => $reviewer->id]);
+
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-QUEUE',
+            'title' => 'Missing process', 'description' => 'Missing process',
+        ]);
+        $action = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Restore controls', 'owner_id' => $worker->id,
+        ]);
+        app(CorrectiveActionWorkflowService::class)->submitForVerification($action, $worker);
+        app(ActionItemSyncService::class)->sync();
+        $task = ActionItem::query()->where('category', 'capa_verification')->firstOrFail();
+
+        $this->actingAs($reviewer);
+        $this->assertContains($task->id, ActionItemResource::getEloquentQuery()->pluck('id')->all());
+
+        $this->actingAs($unrelated);
+        $this->assertNotContains($task->id, ActionItemResource::getEloquentQuery()->pluck('id')->all());
+    }
+
+    public function test_verifier_can_open_capa_tracker_with_verification_permission_alone(): void
+    {
+        $reviewer = User::create(['name' => 'Verifier', 'email' => 'reviewer-only@example.test', 'password' => 'password']);
+        foreach (['portal.access', 'capa.verify'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+            $reviewer->givePermissionTo($permission);
+        }
+
+        $this->actingAs($reviewer);
+        $this->get(CorrectiveActionResource::getUrl('index'))->assertOk();
+    }
+
+    public function test_audit_completion_waits_for_reviewed_checklist_without_extra_fields(): void
+    {
+        $audit = $this->audit();
+        $item = AuditChecklistItem::create([
+            'audit_id' => $audit->id, 'question' => 'Review compliance evidence',
+            'result' => 'not_reviewed',
+        ]);
+        $this->assertRejected(fn () => $audit->update(['status' => 'completed']));
+        $item->update(['result' => 'conforming']);
+        $audit->refresh()->update(['status' => 'completed']);
+        $this->assertSame('completed', $audit->fresh()->status);
+        $this->assertNotNull($audit->fresh()->actual_end_at);
+    }
+
+    public function test_checklist_creates_one_finding_without_extra_user_action(): void
+    {
+        $audit = $this->audit();
+        $checklist = AuditChecklistItem::create([
+            'audit_id' => $audit->id,
+            'question' => 'Apakah akses pengguna direview secara berkala?',
+            'result' => 'nonconformity',
+            'notes' => 'Tidak ditemukan bukti review berkala.',
+        ]);
+
+        $finding = AuditFinding::query()->where('audit_checklist_item_id', $checklist->id)->firstOrFail();
+        $this->assertSame($audit->id, $finding->audit_id);
+        $this->assertSame('nonconformity', $finding->finding_type);
+        $this->assertSame('open', $finding->status);
+
+        $checklist->update(['notes' => 'Informasi tambahan dari auditor.']);
+        $this->assertDatabaseCount('audit_findings', 1);
+        $this->assertSame('Tidak ditemukan bukti review berkala.', $finding->fresh()->description);
+    }
+
+    public function test_capa_requires_independent_verification_and_closes_finding_automatically(): void
+    {
+        $audit = $this->audit();
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id,
+            'code' => 'NCR-01',
+            'title' => 'Tidak ada review berkala',
+            'description' => 'Review akses belum dilakukan.',
+            'root_cause' => 'Belum ditetapkan jadwal dan PIC review.',
+        ]);
+        $owner = User::create(['name' => 'Executor', 'email' => 'executor@example.test', 'password' => 'password']);
+        $verifier = User::create(['name' => 'Verifier', 'email' => 'verifier@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $owner->givePermissionTo('capa.verify');
+        $verifier->givePermissionTo('capa.verify');
+
+        $action = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id,
+            'action' => 'Tetapkan dan lakukan review akses.',
+            'owner_id' => $owner->id,
+            'status' => 'open',
+        ]);
+        $this->assertSame('action', $finding->refresh()->status);
+
+        $this->assertRejected(fn () => $finding->update(['status' => 'closed']));
+        $this->assertRejected(fn () => $action->update(['status' => 'completed']));
+
+        $service = app(CorrectiveActionWorkflowService::class);
+        $service->submitForVerification($action->fresh(), $owner);
+        $this->assertSame('verification', $action->fresh()->status);
+        $this->assertNotNull($action->fresh()->completed_at);
+        $this->assertSame('verification', $finding->fresh()->status);
+
+        $this->assertRejected(fn () => $service->verify($action->fresh(), $owner, true, 'Verifikasi sendiri'));
+        $service->verify($action->fresh(), $verifier, false, 'Bukti belum lengkap.');
+        $this->assertSame('in_progress', $action->fresh()->status);
+        $this->assertSame('action', $finding->fresh()->status);
+
+        $service->submitForVerification($action->fresh(), $owner);
+        $service->verify($action->fresh(), $verifier, true, 'Evidence dan proses sudah efektif.');
+        $this->assertSame('completed', $action->fresh()->status);
+        $this->assertSame('effective', $action->fresh()->effectiveness_status);
+        $this->assertSame('closed', $finding->fresh()->status);
+
+        $this->assertRejected(fn () => $action->fresh()->update(['action' => 'Ubah bukti setelah disetujui']));
+    }
+
+    public function test_finding_waits_for_root_cause_and_all_capa_items(): void
+    {
+        $audit = $this->audit();
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-02',
+            'title' => 'Perbaikan', 'description' => 'Ketidaksesuaian.',
+        ]);
+        $executor = User::create(['name' => 'Executor', 'email' => 'exec2@example.test', 'password' => 'password']);
+        $reviewer = User::create(['name' => 'Reviewer', 'email' => 'review2@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $reviewer->givePermissionTo('capa.verify');
+
+        $a = CorrectiveAction::create(['audit_finding_id' => $finding->id, 'action' => 'A', 'owner_id' => $executor->id]);
+        $b = CorrectiveAction::create(['audit_finding_id' => $finding->id, 'action' => 'B', 'owner_id' => $executor->id]);
+        $service = app(CorrectiveActionWorkflowService::class);
+        foreach ([$a, $b] as $action) {
+            $service->submitForVerification($action->fresh(), $executor);
+            $service->verify($action->fresh(), $reviewer, true, 'Efektif');
+        }
+
+        $this->assertSame('verification', $finding->fresh()->status);
+        $finding->update(['root_cause' => 'Proses kontrol sebelumnya tidak terdokumentasi.']);
+        $this->assertNotNull($finding->fresh()->root_cause);
+        $this->assertSame(2, $finding->fresh()->correctiveActions()->where('status', 'completed')->count());
+        $this->assertSame('closed', $finding->fresh()->status);
+    }
+
+    private function assertRejected(callable $attempt): void
+    {
+        try {
+            $attempt();
+            $this->fail('Operasi tidak sah harus ditolak.');
+        } catch (ValidationException $exception) {
+            $this->assertNotEmpty($exception->errors());
+        }
+    }
+
+    public function test_unassigned_capa_auto_records_submitter_and_rejects_self_verification(): void
+    {
+        $audit = $this->audit();
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-NO-PIC',
+            'title' => 'Missing assignment', 'description' => 'Remediation without PIC',
+            'root_cause' => 'Responsibility not yet assigned',
+        ]);
+        $submitter = User::create(['name' => 'Submitter', 'email' => 'unassigned-submitter@example.test', 'password' => 'password']);
+        $reviewer = User::create(['name' => 'Reviewer', 'email' => 'unassigned-reviewer@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.manage', 'web');
+        Permission::findOrCreate('capa.verify', 'web');
+        $submitter->givePermissionTo('capa.manage', 'capa.verify');
+        $reviewer->givePermissionTo('capa.verify');
+
+        $capa = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Assign and complete task', 'status' => 'open',
+        ]);
+        $service = app(CorrectiveActionWorkflowService::class);
+        $service->submitForVerification($capa, $submitter);
+        $this->assertSame($submitter->id, $capa->fresh()->owner_id);
+        $this->assertSame('verification', $capa->fresh()->status);
+        $this->assertRejected(fn () => $service->verify($capa->fresh(), $submitter, true, 'Self-approved'));
+        $service->verify($capa->fresh(), $reviewer, true, 'Independent verification confirmed');
+        $this->assertSame('completed', $capa->fresh()->status);
+        $this->assertSame($reviewer->id, $capa->fresh()->verified_by);
+    }
+
+    public function test_capa_review_checks_scope_in_service_not_only_filament_visibility(): void
+    {
+        $this->seed(IsoRolePermissionSeeder::class);
+        $audit = $this->audit();
+        $worker = User::create(['name' => 'Executor', 'email' => 'scope-executor-capa@example.test', 'password' => 'password']);
+        $intruder = User::create(['name' => 'Foreign verifier', 'email' => 'foreign-verifier-capa@example.test', 'password' => 'password']);
+        $manager = User::create(['name' => 'Global reviewer', 'email' => 'global-verifier-capa@example.test', 'password' => 'password']);
+        $manager->assignRole('iso_manager');
+        $intruder->givePermissionTo('capa.verify', 'capa.manage');
+        $audit->managementSystem->scope->update(['owner_id' => $worker->id]);
+
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-SCOPED',
+            'title' => 'Scoped finding', 'description' => 'Needs verification',
+            'root_cause' => 'No prior process',
+        ]);
+        $capa = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Fix process',
+            'owner_id' => $worker->id, 'status' => 'open',
+        ]);
+        $service = app(CorrectiveActionWorkflowService::class);
+        $this->assertRejected(fn () => $service->submitForVerification($capa->fresh(), $intruder));
+        $service->submitForVerification($capa->fresh(), $worker);
+        $this->assertRejected(fn () => $service->verify($capa->fresh(), $intruder, true, 'Forged approval'));
+        $service->verify($capa->fresh(), $manager, true, 'Reviewed by independent global reviewer');
+        $this->assertSame('completed', $capa->fresh()->status);
+    }
+
+    public function test_capa_cannot_be_deleted_or_reassigned_after_submission(): void
+    {
+        $audit = $this->audit();
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-KEEP',
+            'title' => 'Preserved action', 'description' => 'Audit preservation',
+        ]);
+        $worker = User::create(['name' => 'Executor', 'email' => 'capa-history-worker@example.test', 'password' => 'password']);
+        $reviewer = User::create(['name' => 'Reviewer', 'email' => 'capa-history-reviewer@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $reviewer->givePermissionTo('capa.verify');
+        $capa = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Preserve history',
+            'owner_id' => $worker->id, 'status' => 'open',
+        ]);
+        $this->assertRejected(fn () => $capa->delete());
+        $service = app(CorrectiveActionWorkflowService::class);
+        $service->submitForVerification($capa->fresh(), $worker);
+        $this->assertRejected(fn () => $capa->fresh()->update(['owner_id' => $reviewer->id]));
+        $service->verify($capa->fresh(), $reviewer, true, 'Verified effective');
+        $this->assertRejected(fn () => $capa->fresh()->update(['status' => 'in_progress']));
+        $this->assertRejected(fn () => $capa->fresh()->delete());
+        $this->assertDatabaseHas('corrective_actions', ['id' => $capa->id, 'status' => 'completed']);
+    }
+
+    public function test_finding_stays_in_action_while_another_capa_remains_open(): void
+    {
+        $audit = $this->audit();
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-MULTI',
+            'title' => 'Multi CAPA', 'description' => 'Two steps',
+            'root_cause' => 'Missing controls',
+        ]);
+        $worker = User::create(['name' => 'Worker', 'email' => 'capa-multi-worker@example.test', 'password' => 'password']);
+        $reviewer = User::create(['name' => 'Reviewer', 'email' => 'capa-multi-reviewer@example.test', 'password' => 'password']);
+        Permission::findOrCreate('capa.verify', 'web');
+        $reviewer->givePermissionTo('capa.verify');
+
+        $first = CorrectiveAction::create(['audit_finding_id' => $finding->id, 'action' => 'Step one', 'owner_id' => $worker->id, 'status' => 'open']);
+        $second = CorrectiveAction::create(['audit_finding_id' => $finding->id, 'action' => 'Step two', 'owner_id' => $worker->id, 'status' => 'open']);
+        $service = app(CorrectiveActionWorkflowService::class);
+        $service->submitForVerification($first, $worker);
+        $this->assertSame('action', $finding->fresh()->status);
+        $service->submitForVerification($second, $worker);
+        $this->assertSame('verification', $finding->fresh()->status);
+        $service->verify($first->fresh(), $reviewer, true, 'First step effective');
+        $this->assertSame('verification', $finding->fresh()->status);
+        $service->verify($second->fresh(), $reviewer, true, 'Second step effective');
+        $this->assertSame('closed', $finding->fresh()->status);
+    }
+
+    public function test_my_work_keeps_one_action_for_same_pic_but_preserves_distinct_owners(): void
+    {
+        $audit = $this->audit();
+        $worker = User::create(['name' => 'Worker', 'email' => 'work-dedup-owner@example.test', 'password' => 'password']);
+        $other = User::create(['name' => 'Other', 'email' => 'work-dedup-other@example.test', 'password' => 'password']);
+        $finding = AuditFinding::create([
+            'audit_id' => $audit->id, 'code' => 'NCR-WORK',
+            'title' => 'Remediate control', 'description' => 'Overlap test',
+            'owner_id' => $worker->id,
+        ]);
+        $capa = CorrectiveAction::create([
+            'audit_finding_id' => $finding->id, 'action' => 'Implement control',
+            'owner_id' => $worker->id, 'status' => 'open',
+        ]);
+        $sync = app(ActionItemSyncService::class);
+        $sync->sync();
+        $this->assertSame(1, ActionItem::query()->where('source_type', $capa->getMorphClass())->where('source_id', $capa->id)->where('status', 'open')->count());
+        $this->assertSame(0, ActionItem::query()->where('category', 'finding_response')->where('source_id', $finding->id)->where('status', 'open')->count());
+        $this->assertStringContainsString('akar penyebab', ActionItem::query()->where('category', 'capa')->firstOrFail()->description);
+        $sync->sync();
+        $this->assertSame(1, ActionItem::query()->where('category', 'capa')->where('status', 'open')->count());
+
+        $capa->update(['owner_id' => $other->id]);
+        $sync->sync();
+        $this->assertSame(1, ActionItem::query()->where('category', 'finding_response')->where('owner_id', $worker->id)->where('status', 'open')->count());
+        $this->assertSame(1, ActionItem::query()->where('category', 'capa')->where('owner_id', $other->id)->where('status', 'open')->count());
+    }
+}

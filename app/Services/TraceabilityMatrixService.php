@@ -56,6 +56,9 @@ class TraceabilityMatrixService
 
         $reuses = EvidenceReuse::query()->accepted()
             ->where('target_management_system_id', $system->id)
+            ->where(fn (Builder $query) => $query
+                ->whereHas('requirementMapping', fn (Builder $m) => $m->where('status', 'approved'))
+                ->orWhereHas('controlMapping', fn (Builder $m) => $m->where('status', 'approved')))
             ->where(function (Builder $query) use ($requirement, $controlIds): void {
                 $query->where('target_requirement_id', $requirement->id);
                 if ($controlIds !== []) {
@@ -159,6 +162,7 @@ class TraceabilityMatrixService
     {
         return $evidence->verification_status === 'verified'
             && $evidence->status === 'active'
+            && (! $evidence->valid_from || $evidence->valid_from->lte(today()))
             && (! $evidence->expires_at || $evidence->expires_at->gte(today()));
     }
 

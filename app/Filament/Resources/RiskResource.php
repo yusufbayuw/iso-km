@@ -6,12 +6,16 @@ use App\Filament\Resources\RiskResource\Pages;
 use App\Models\Risk;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class RiskResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Risk::class;
     protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
     protected static ?string $navigationGroup = 'Risiko';
@@ -23,7 +27,7 @@ class RiskResource extends Resource
     {
         $scale = [1 => '1 - Sangat Rendah',2 => '2 - Rendah',3 => '3 - Sedang',4 => '4 - Tinggi',5 => '5 - Sangat Tinggi'];
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->live()->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode Risiko')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Risiko')->required()->columnSpanFull(),
             Forms\Components\TextInput::make('category')->label('Kategori'),
@@ -37,8 +41,10 @@ class RiskResource extends Resource
             Forms\Components\DatePicker::make('target_date')->label('Target')->native(false),
             Forms\Components\Textarea::make('description')->label('Deskripsi Risiko')->columnSpanFull(),
             Forms\Components\Textarea::make('treatment_plan')->label('Rencana Perlakuan')->columnSpanFull(),
-            Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
-            Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
         ])->columns(2);
     }
 

@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class ManagementReviewResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = ManagementReview::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Performance & Review';
@@ -22,7 +24,7 @@ class ManagementReviewResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode Review')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Judul')->required()->columnSpanFull(),
             Forms\Components\Select::make('status')->label('Status')->options(['planned' => 'Planned','scheduled' => 'Scheduled','held' => 'Held','completed' => 'Completed','cancelled' => 'Cancelled'])->required()->default('planned'),

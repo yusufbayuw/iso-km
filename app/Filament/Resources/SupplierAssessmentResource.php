@@ -15,6 +15,8 @@ use Filament\Tables\Table;
 
 class SupplierAssessmentResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = SupplierAssessment::class;
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
     protected static ?string $navigationGroup = 'Third Parties';
@@ -26,7 +28,7 @@ class SupplierAssessmentResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('supplier_id')->label('Supplier')->relationship('supplier', 'name')->required()->searchable()->preload(),
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->required()->searchable()->preload(),
             Forms\Components\DatePicker::make('next_review_at')->label('Review Berikutnya')->native(false),
             Forms\Components\Select::make('evidence_id')->label('Evidence Assessment')->relationship('evidence', 'title')->searchable()->preload()->columnSpanFull(),
             Forms\Components\Placeholder::make('workflow_status')->label('Status Workflow')->content(fn (?SupplierAssessment $record): string => $record?->status ?? 'planned'),

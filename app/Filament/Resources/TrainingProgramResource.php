@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class TrainingProgramResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = TrainingProgram::class;
     protected static ?string $navigationIcon = 'heroicon-o-academic-cap';
     protected static ?string $navigationGroup = 'People & Competence';
@@ -22,7 +24,7 @@ class TrainingProgramResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode')->required(),
             Forms\Components\TextInput::make('title')->label('Program')->required()->columnSpanFull(),
             Forms\Components\Select::make('category')->label('Kategori')->options(['awareness' => 'Awareness','training' => 'Training','certification' => 'Certification','exercise' => 'Exercise / Drill','onboarding' => 'Onboarding'])->required()->default('awareness'),

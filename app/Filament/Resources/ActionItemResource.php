@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ActionItemResource\Pages;
 use App\Models\ActionItem;
+use App\Services\ActionSourceNavigationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -30,7 +31,20 @@ class ActionItemResource extends Resource
         }
         $user = auth()->user();
         if (! $user?->can('action_item.view_all')) {
-            $query->where('owner_id', $user?->id);
+            $query->where(function (Builder $query) use ($user): void {
+                $query->where('owner_id', $user?->id);
+
+                // Verification is an unassigned team queue. Offer it only to
+                // authorized reviewers in scopes they are allowed to see.
+                if ($user?->can('capa.verify')) {
+                    $query->orWhere(function (Builder $shared) use ($user): void {
+                        $shared->whereNull('owner_id')
+                            ->where('category', 'capa_verification')
+                            ->whereHas('managementSystem.scope', fn (Builder $scope) => $scope
+                                ->whereNull('owner_id')->orWhere('owner_id', $user->id));
+                    });
+                }
+            });
         }
         return $query;
     }
@@ -64,6 +78,11 @@ class ActionItemResource extends Resource
             Tables\Filters\SelectFilter::make('category')->options(self::categoryOptions()),
             Tables\Filters\Filter::make('overdue')->query(fn (Builder $query): Builder => $query->where('status', '!=', 'completed')->whereNotNull('due_at')->where('due_at', '<', now())),
         ])->actions([
+            Tables\Actions\Action::make('open_source')->label('Buka Modul')
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->visible(fn (ActionItem $record): bool => $record->is_generated
+                    && app(ActionSourceNavigationService::class)->url($record) !== null)
+                ->url(fn (ActionItem $record): ?string => app(ActionSourceNavigationService::class)->url($record)),
             Tables\Actions\Action::make('complete')->label('Selesai')->icon('heroicon-o-check-circle')->visible(fn (ActionItem $record): bool => ! $record->is_generated && $record->status !== 'completed')->requiresConfirmation()->action(fn (ActionItem $record) => $record->update(['status' => 'completed', 'completed_at' => now()])),
             Tables\Actions\EditAction::make()->visible(fn (ActionItem $record): bool => ! $record->is_generated),
             Tables\Actions\DeleteAction::make()->visible(fn (ActionItem $record): bool => ! $record->is_generated),
@@ -85,6 +104,8 @@ class ActionItemResource extends Resource
             'risk_treatment' => 'Risk Treatment',
             'audit_preparation' => 'Audit',
             'capa' => 'CAPA',
+            'capa_verification' => 'Verifikasi CAPA',
+            'finding_response' => 'Tindak Lanjut Finding',
             'objective_review' => 'Objective',
             'compliance_review' => 'Compliance',
             'management_review' => 'Management Review',

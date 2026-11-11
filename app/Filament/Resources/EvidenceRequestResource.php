@@ -29,7 +29,7 @@ class EvidenceRequestResource extends Resource
         if (! $user?->can('evidence_request.view_all')) {
             $query->where('owner_id', $user?->id);
         }
-        return $query;
+        return app(\App\Services\ModelScopeAuthorizationService::class)->scopeQuery($query, $user);
     }
 
     public static function table(Table $table): Table

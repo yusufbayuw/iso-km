@@ -14,6 +14,8 @@ use Filament\Tables\Table;
 
 class EvidenceReuseResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = EvidenceReuse::class;
     protected static ?string $navigationIcon = 'heroicon-o-document-duplicate';
     protected static ?string $navigationGroup = 'Cross-Standard';

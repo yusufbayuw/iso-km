@@ -252,6 +252,9 @@ class GuidedWizardIntegrationTest extends TestCase
         }
         config()->set('iso-km.guided_wizard_enabled', true);
         $foreign = User::create(['name' => 'Foreign', 'email' => 'foreign-wizard@example.test', 'password' => 'password']);
+        // Arrange foreign data as its actual owner. The coordinator must not
+        // be able to create records in another user's owned scope.
+        $this->actingAs($foreign);
         $foreignScope = ComplianceScope::create([
             'code' => 'SC-FOREIGN', 'name' => 'Foreign scope', 'owner_id' => $foreign->id,
         ]);
@@ -259,6 +262,16 @@ class GuidedWizardIntegrationTest extends TestCase
             'standard_id' => $standard->id, 'compliance_scope_id' => $foreignScope->id,
             'code' => 'MS-FOREIGN', 'name' => 'Foreign system',
         ]);
+        $this->actingAs($actor);
+        try {
+            ManagementSystem::create([
+                'standard_id' => $standard->id, 'compliance_scope_id' => $foreignScope->id,
+                'code' => 'MS-FORGED', 'name' => 'Unauthorized new system',
+            ]);
+            $this->fail('Cross-scope management system creation must be blocked.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('compliance_scope_id', $e->errors());
+        }
         try {
             app(GuidedWizardDraftService::class)->start($actor, $foreignSystem->id, 'Forged');
             $this->fail('Cross-system assessment creation must be blocked');

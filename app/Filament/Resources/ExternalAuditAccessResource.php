@@ -13,6 +13,8 @@ use Filament\Tables\Table;
 
 class ExternalAuditAccessResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = ExternalAuditAccess::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Audit & Improvement';
@@ -25,7 +27,7 @@ class ExternalAuditAccessResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('user_id')->label('Auditor')->relationship('user', 'name')->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} — {$record->email}")->searchable(['name','email'])->preload()->required()->disabled(fn (?ExternalAuditAccess $record): bool => $record !== null),
-            Forms\Components\Select::make('management_system_id')->label('Management System')->relationship('managementSystem', 'name')->searchable()->preload()->required()->disabled(fn (?ExternalAuditAccess $record): bool => $record !== null),
+            Forms\Components\Select::make('management_system_id')->label('Management System')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query, $record) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user(), $record?->management_system_id))->searchable()->preload()->required()->disabled(fn (?ExternalAuditAccess $record): bool => $record !== null),
             Forms\Components\DateTimePicker::make('valid_from')->label('Berlaku Mulai')->native(false)->seconds(false)->default(now()),
             Forms\Components\DateTimePicker::make('expires_at')->label('Berakhir')->native(false)->seconds(false)->required(),
             Forms\Components\Toggle::make('allow_audit_pack')->label('Izinkan External Auditor Pack')->default(false),

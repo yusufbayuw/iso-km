@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActionItem;
 use App\Models\Audit;
+use App\Models\AuditFinding;
 use App\Models\CompetencyRecord;
 use App\Models\ComplianceObligation;
 use App\Models\CorrectiveAction;
@@ -33,7 +34,48 @@ class ActionItemSyncService
         $changes = 0;
         $attentionHorizon = today()->addDays(30);
 
-        CorrectiveAction::query()->whereNotIn('status', ['closed', 'verified', 'completed'])->each(fn (CorrectiveAction $item) => $changes += $this->project($item, 'capa', $item->owner_id, $item->finding?->audit?->management_system_id, 'Tindak lanjut CAPA', $item->action, $item->due_date));
+        CorrectiveAction::query()->with('finding.audit')
+            ->whereNotIn('status', ['closed', 'verified', 'completed'])
+            ->each(function (CorrectiveAction $item) use (&$changes): void {
+                $description = $item->action;
+                if ($item->status !== 'verification'
+                    && $item->owner_id !== null
+                    && $item->finding?->owner_id !== null
+                    && (int) $item->owner_id === (int) $item->finding->owner_id
+                    && blank($item->finding->root_cause)) {
+                    $description .= "\nLengkapi akar penyebab pada temuan sebelum penutupan.";
+                }
+
+                $changes += $this->project(
+                    $item, $item->status === 'verification' ? 'capa_verification' : 'capa',
+                    $item->status === 'verification' ? null : $item->owner_id,
+                    $item->finding?->audit?->management_system_id,
+                    $item->status === 'verification' ? 'Menunggu verifikasi CAPA' : 'Tindak lanjut CAPA',
+                    $description, $item->due_date
+                );
+            });
+        AuditFinding::query()->with('correctiveActions')
+            ->where('finding_type', 'nonconformity')->where('status', '!=', 'closed')
+            ->each(function (AuditFinding $item) use (&$changes): void {
+                $active = $item->correctiveActions->filter(fn (CorrectiveAction $action): bool =>
+                    ! in_array($action->status, ['completed', 'closed', 'verified'], true));
+
+                // When the same PIC already has a CAPA card, do not show a
+                // second generic finding card for the very same work.
+                $hasOwnedActiveCapa = $item->owner_id !== null && $active->contains(
+                    fn (CorrectiveAction $action): bool => $action->owner_id !== null
+                        && (int) $action->owner_id === (int) $item->owner_id
+                );
+                if ($hasOwnedActiveCapa) {
+                    return;
+                }
+
+                $changes += $this->project(
+                    $item, 'finding_response', $item->owner_id,
+                    $item->audit?->management_system_id,
+                    'Tindak lanjut temuan '.$item->code, $item->title, $item->due_date
+                );
+            });
         ManagementReviewAction::query()->whereNotIn('status', ['completed', 'closed'])->each(fn (ManagementReviewAction $item) => $changes += $this->project($item, 'management_review_action', $item->owner_id, $item->managementReview?->management_system_id, 'Tindak lanjut management review', $item->action, $item->due_date));
         EvidenceRequest::query()->whereNotIn('status', ['verified', 'waived'])->each(fn (EvidenceRequest $item) => $changes += $this->project($item, 'evidence_collection', $item->owner_id, $item->management_system_id, 'Kumpulkan evidence'.($item->schedule ? ': '.$item->schedule->title : ''), $item->period_label ? 'Periode '.$item->period_label : null, $item->due_at));
         DocumentDistribution::query()->with(['document', 'revision'])->where('status', 'pending')->each(fn (DocumentDistribution $item) => $changes += $this->project($item, 'document_acknowledgement', $item->user_id, $item->document?->managementSystems()->value('management_systems.id'), 'Acknowledge dokumen '.($item->document?->code ?? ''), 'Revisi '.($item->revision?->revision ?? '-'), $item->acknowledgement_due_at));
