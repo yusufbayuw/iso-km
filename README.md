@@ -454,6 +454,25 @@ php artisan serve
 
 Policy domain utama disimpan di repository. `shield:generate --all` dipakai untuk sinkronisasi resource tambahan, bukan sebagai satu-satunya pengaman aplikasi.
 
+### Manajemen akun & Shield (Filament 3)
+
+- Menu **Pengguna** pada /portal/users: tambah/ubah akun, nama, email, username opsional, peran Shield, kata sandi, dan status aktif/nonaktif.
+- Menu **Role** pada /portal/shield/roles merupakan resource native Filament Shield, bukan duplikasi. Nama role khusus adalah super_admin (underscore, bukan super-admin).
+- Manajemen role dan pengguna dibatasi untuk super_admin. Role super_admin tidak dapat diedit/dihapus di UI Shield, pengguna tidak dapat mengubah peran/status aktif sendiri, dan akun tidak dapat dihapus (gunakan nonaktifkan) demi referensi audit.
+- Migrasi baru menambahkan users.username (nullable/unique) dan users.is_active (default true) tanpa menghapus pengguna lama.
+
+Upgrade database existing (termasuk production), setelah perubahan kode diterapkan:
+
+    php artisan migrate --force
+    php artisan db:seed --class=IsoRolePermissionSeeder --force
+    php artisan optimize:clear
+
+Jika belum ada pengguna dengan role super_admin, tetapkan **ID akun yang sah** secara eksplisit memakai perintah bawaan Shield:
+
+    php artisan shield:super-admin --panel=portal --user=ID_PENGGUNA
+
+Tidak ada akun admin atau kata sandi default yang otomatis ditambahkan. Jangan gunakan migrate:fresh, shield:install --fresh, atau shield:generate --all di production; generator dapat menimpa policy kustom.
+
 ### Upgrade existing environment
 
 ```bash
