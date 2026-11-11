@@ -28,7 +28,7 @@ class SupplierAssessmentResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('supplier_id')->label('Supplier')->relationship('supplier', 'name')->required()->searchable()->preload(),
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->required()->searchable()->preload(),
             Forms\Components\DatePicker::make('next_review_at')->label('Review Berikutnya')->native(false),
             Forms\Components\Select::make('evidence_id')->label('Evidence Assessment')->relationship('evidence', 'title')->searchable()->preload()->columnSpanFull(),
             Forms\Components\Placeholder::make('workflow_status')->label('Status Workflow')->content(fn (?SupplierAssessment $record): string => $record?->status ?? 'planned'),

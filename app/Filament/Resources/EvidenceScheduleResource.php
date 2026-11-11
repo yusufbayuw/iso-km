@@ -25,7 +25,7 @@ class EvidenceScheduleResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->required()->searchable()->preload(),
             Forms\Components\TextInput::make('code')->label('Kode')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('title')->label('Evidence yang Dibutuhkan')->required()->columnSpanFull(),
             Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),

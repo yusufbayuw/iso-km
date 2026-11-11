@@ -27,7 +27,7 @@ class ManagementSystemResource extends Resource
             Forms\Components\TextInput::make('code')->label('Kode')->required()->unique(ignoreRecord: true),
             Forms\Components\TextInput::make('name')->label('Nama Sistem')->required(),
             Forms\Components\Select::make('standard_id')->label('Standar')->relationship('standard', 'code')->required()->searchable()->preload(),
-            Forms\Components\Select::make('compliance_scope_id')->label('Lingkup')->relationship('scope', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('compliance_scope_id')->label('Lingkup')->relationship('scope', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableScopes($query, auth()->user()))->required()->searchable()->preload(),
             Forms\Components\Select::make('status')->label('Status')->options(['planning' => 'Perencanaan','implementation' => 'Implementasi','internal_audit' => 'Audit Internal','certification_ready' => 'Siap Sertifikasi','certified' => 'Tersertifikasi','suspended' => 'Ditangguhkan'])->required()->default('planning'),
             Forms\Components\DatePicker::make('target_certification_date')->label('Target Sertifikasi')->native(false),
             Forms\Components\DatePicker::make('certified_at')->label('Tanggal Sertifikasi')->native(false),

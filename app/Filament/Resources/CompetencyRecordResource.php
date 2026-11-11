@@ -24,7 +24,7 @@ class CompetencyRecordResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name', modifyQueryUsing: fn ($query) => app(\App\Services\ModelScopeAuthorizationService::class)->scopeAvailableSystems($query, auth()->user()))->required()->searchable()->preload(),
             Forms\Components\Select::make('user_id')->label('Personel')->relationship('user', 'name')->required()->searchable()->preload(),
             Forms\Components\TextInput::make('competency')->label('Kompetensi')->required()->columnSpanFull(),
             Forms\Components\TextInput::make('source')->label('Sumber Kompetensi')->placeholder('Training, sertifikasi, pengalaman, assessment'),
