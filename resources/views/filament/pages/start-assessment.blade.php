@@ -31,8 +31,42 @@
                 <form wire:submit="start" class="space-y-5">
                     {{ $this->startForm }}
 
-                    <div class="flex justify-end">
-                        <x-filament::button type="submit" icon="heroicon-o-play">
+                    @if ($this->bankReadiness)
+                        <div class="rounded-lg border p-4 {{ $this->bankReadiness['ready'] ? 'border-success-300 bg-success-50 dark:border-success-700 dark:bg-success-950/30' : 'border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950/30' }}">
+                            <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <x-filament::badge :color="$this->bankReadiness['ready'] ? 'success' : 'warning'">
+                                    {{ $this->bankReadiness['ready'] ? 'Bank Siap Digunakan' : 'Bank Belum Terbit' }}
+                                </x-filament::badge>
+                                @if ($this->bankReadiness['name'])
+                                    <span class="text-sm font-medium text-gray-950 dark:text-white">
+                                        {{ $this->bankReadiness['name'] }}
+                                        (v{{ $this->bankReadiness['version'] }}, {{ $this->bankReadiness['question_count'] }} pertanyaan)
+                                    </span>
+                                @endif
+                            </div>
+                            <p class="text-sm text-gray-700 dark:text-gray-200">
+                                {{ $this->bankReadiness['message'] }}
+                            </p>
+                            @if (! $this->bankReadiness['ready'] && auth()->user()?->can('guided.bank.manage'))
+                                <div class="mt-3">
+                                    <x-filament::button color="gray" size="sm" tag="a" :href="\App\Filament\Resources\GuidedQuestionBankResource::getUrl('index')" icon="heroicon-o-book-open">
+                                        Periksa Bank Pertanyaan
+                                    </x-filament::button>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    @error('startData.system_id')
+                        <p class="text-sm text-danger-600 dark:text-danger-400" role="alert">{{ $message }}</p>
+                    @enderror
+
+                    <div class="flex flex-wrap items-center justify-end gap-3">
+                        <span wire:loading wire:target="start" class="text-sm text-gray-500 dark:text-gray-400" role="status">
+                            Memeriksa bank dan membuat penugasan...
+                        </span>
+                        <x-filament::button type="submit" icon="heroicon-o-play"
+                            wire:loading.attr="disabled" wire:target="start">
                             Mulai Asesmen
                         </x-filament::button>
                     </div>
