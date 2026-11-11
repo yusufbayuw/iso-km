@@ -20,39 +20,226 @@ use App\Services\GuidedSystemAccessService;
 use App\Services\GuidedWizardCompletenessService;
 use App\Services\GuidedWizardDraftService;
 use App\Services\GuidedWorkbookExportService;
+use Filament\Actions\Action;
+use Filament\Forms;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 
-class StartAssessment extends Page
+class StartAssessment extends Page implements HasForms
 {
+    use InteractsWithForms;
+
     protected static ?string $navigationIcon = 'heroicon-o-play-circle';
     protected static ?string $navigationGroup = 'Guided Assessment';
     protected static ?string $navigationLabel = 'Mulai / Lanjutkan Asesmen';
+    protected static ?string $title = 'Mulai / Lanjutkan Asesmen';
     protected static ?string $slug = 'mulai-asesmen';
     protected static ?int $navigationSort = 0;
     protected static string $view = 'filament.pages.start-assessment';
 
     public ?int $runId = null;
-    public ?int $systemId = null;
-    public string $assessmentName = '';
     public string $stage = 'overview';
     public ?int $questionId = null;
     public string $contextKey = 'general';
-    public string $newContextKey = 'general';
-    public ?string $answer = null;
-    public ?string $notes = null;
-    public array $evidenceIds = [];
     public int $draftVersion = 0;
     public string $saveMessage = '';
-    public ?int $contributorId = null;
-    public ?int $delegateQuestionId = null;
-    public string $scopeKind = 'asset';
-    public string $scopeTitle = '';
-    public ?string $scopeCategory = null;
-    public ?string $scopeNotes = null;
+
+    // Native Filament Forms own all input state. Do not mix raw HTML form inputs
+    // or independent Livewire properties into the same validation flow.
+    public ?array $startData = [];
+    public ?array $runData = [];
+    public ?array $questionPickerData = [];
+    public ?array $contextData = [];
+    public ?array $answerData = [];
+    public ?array $scopeData = [];
+    public ?array $delegateData = [];
+
+    protected function getForms(): array
+    {
+        return [
+            'startForm',
+            'runSelectorForm',
+            'questionPickerForm',
+            'contextForm',
+            'answerForm',
+            'scopeForm',
+            'delegateForm',
+        ];
+    }
+
+    public function startForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('system_id')
+                ->label('Sistem manajemen yang dinilai')
+                ->options(fn (): array => $this->systems)
+                ->placeholder('Pilih sistem manajemen')
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->required()
+                ->helperText('Hanya sistem dalam lingkup kewenangan Anda.'),
+            Forms\Components\TextInput::make('name')
+                ->label('Nama asesmen')
+                ->placeholder('Contoh: Asesmen Keamanan Informasi Semester 1')
+                ->required()
+                ->maxLength(255),
+        ])->statePath('startData')->columns(1);
+    }
+
+    public function runSelectorForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('run_id')
+                ->label('Asesmen yang dapat Anda akses')
+                ->options(fn (): array => $this->runs->mapWithKeys(
+                    fn ($run) => [$run->id => $run->name.' — '.($run->system?->name ?? '-')]
+                )->all())
+                ->placeholder('Pilih asesmen')
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->live()
+                ->afterStateUpdated(function ($state): void {
+                    if (filled($state) && (int) $state !== $this->runId) {
+                        $this->chooseRun((int) $state);
+                    }
+                }),
+        ])->statePath('runData');
+    }
+
+    public function questionPickerForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('question_id')
+                ->label('Pilih pertanyaan')
+                ->options(fn (): array => $this->assignments->mapWithKeys(
+                    fn (GuidedAssignment $assignment) => [
+                        $assignment->guided_question_id => $assignment->question->code
+                            .' — '.$assignment->question->prompt
+                            .' ['.($assignment->status === 'submitted' ? 'Terkirim' : 'Belum selesai').']',
+                    ]
+                )->all())
+                ->placeholder('Cari berdasarkan kode atau isi pertanyaan')
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->live()
+                ->afterStateUpdated(function ($state): void {
+                    if (filled($state) && (int) $state !== $this->questionId) {
+                        $this->chooseQuestion((int) $state);
+                    }
+                }),
+        ])->statePath('questionPickerData');
+    }
+
+    public function contextForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\TextInput::make('context_key')
+                ->label('Konteks / sistem / aset')
+                ->required()
+                ->maxLength(120)
+                ->default('general')
+                ->helperText('Gunakan konteks berbeda untuk mencatat jawaban per aset atau sistem.'),
+        ])->statePath('contextData');
+    }
+
+    private function answerFields(): array
+    {
+        $question = $this->currentAssignment?->question;
+        if (! $question) { return []; }
+
+        $field = match ($question->answer_type) {
+            'single_choice' => Forms\Components\Select::make('value')
+                ->options(collect($question->answer_options ?? [])->mapWithKeys(
+                    fn ($choice) => [(string) $choice => (string) $choice]
+                )->all())
+                ->placeholder('Pilih kondisi yang sesuai')
+                ->native(false),
+            'number' => Forms\Components\TextInput::make('value')->numeric(),
+            'date' => Forms\Components\DatePicker::make('value')->native(false),
+            default => Forms\Components\Textarea::make('value')->rows(4)->maxLength(10000),
+        };
+        $field->label('Jawaban')
+            ->helperText('Isi keadaan yang sebenarnya. Kirim jawaban setelah siap untuk diperiksa.')
+            ->live(onBlur: true)
+            ->afterStateUpdated(fn () => $this->saveCurrentSilently());
+
+        return [
+            $field,
+            Forms\Components\Textarea::make('notes')
+                ->label('Keterangan tambahan')
+                ->rows(3)
+                ->maxLength(100000)
+                ->placeholder('Jelaskan kondisi, penanggung jawab, hambatan, dan tindak lanjut...')
+                ->live(onBlur: true)
+                ->afterStateUpdated(fn () => $this->saveCurrentSilently()),
+            Forms\Components\Select::make('evidence_ids')
+                ->label('Bukti pendukung yang tersedia')
+                ->helperText('Jika belum ada bukti, tetap catat kondisi sebenarnya. Pemeriksa dapat meminta bukti tambahan.')
+                ->options(fn (): array => $this->evidenceChoices)
+                ->multiple()
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->live()
+                ->afterStateUpdated(fn () => $this->saveCurrentSilently()),
+        ];
+    }
+
+    public function answerForm(Form $form): Form
+    {
+        return $form->schema(fn (): array => $this->answerFields())
+            ->statePath('answerData')->columns(1);
+    }
+
+    public function scopeForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('kind')
+                ->label('Jenis data')
+                ->options(['asset' => 'Aset informasi', 'activity' => 'Aktivitas informasi'])
+                ->native(false)->required()->default('asset'),
+            Forms\Components\TextInput::make('title')
+                ->label('Nama aset / aktivitas')->required()->maxLength(255),
+            Forms\Components\TextInput::make('category')
+                ->label('Kategori')->maxLength(255),
+            Forms\Components\Textarea::make('notes')
+                ->label('Catatan')->rows(2)->columnSpanFull(),
+        ])->statePath('scopeData')->columns(2);
+    }
+
+    public function delegateForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Select::make('contributor_id')
+                ->label('Kontributor')
+                ->required()
+                ->searchable()
+                ->getSearchResultsUsing(fn (string $search): array => User::query()
+                    ->permission('guided.answer.submit')
+                    ->where('name', 'like', '%'.$search.'%')
+                    ->orderBy('name')->limit(30)->pluck('name', 'id')->all())
+                ->getOptionLabelUsing(fn ($value): ?string =>
+                    User::query()->whereKey($value)->value('name'))
+                ->helperText('Hanya pengguna dengan izin menjawab yang dapat ditugaskan.'),
+            Forms\Components\Select::make('question_id')
+                ->label('Cakupan pertanyaan')
+                ->options(fn (): array => $this->run
+                    ? $this->run->bank->questions()->whereHas('targets')
+                        ->orderBy('sort_order')->pluck('code', 'id')->all()
+                    : [])
+                ->placeholder('Seluruh pertanyaan awal')
+                ->searchable()->preload()->native(false),
+        ])->statePath('delegateData')->columns(2);
+    }
 
     public static function canAccess(): bool
     {
@@ -69,6 +256,14 @@ class StartAssessment extends Page
     public function mount(): void
     {
         abort_unless(static::canAccess(), 403);
+        $this->startForm->fill();
+        $this->runSelectorForm->fill();
+        $this->questionPickerForm->fill();
+        $this->contextForm->fill(['context_key' => 'general']);
+        $this->answerForm->fill();
+        $this->scopeForm->fill(['kind' => 'asset']);
+        $this->delegateForm->fill();
+
         $requested = (int) request()->query('run', 0);
         $run = $requested ? $this->visibleRun($requested)
             : GuidedAssessment::query()->whereHas('memberships', fn ($q) =>
@@ -139,12 +334,9 @@ class StartAssessment extends Page
 
     public function start(): void
     {
-        $data = $this->validate([
-            'systemId' => ['required', 'integer'],
-            'assessmentName' => ['required', 'string', 'max:255'],
-        ]);
+        $data = $this->startForm->getState();
         $run = app(GuidedWizardDraftService::class)->start(
-            auth()->user(), (int) $data['systemId'], $data['assessmentName']
+            auth()->user(), (int) $data['system_id'], $data['name']
         );
         $this->openRun($run);
         $this->stage = 'questions';
@@ -166,7 +358,10 @@ class StartAssessment extends Page
         $this->questionId = $preferred;
         $this->contextKey = $recent && $recent->guided_question_id === $preferred
             ? $recent->context_key : 'general';
-        $this->newContextKey = $this->contextKey;
+
+        $this->runSelectorForm->fill(['run_id' => $run->id]);
+        $this->questionPickerForm->fill(['question_id' => $preferred]);
+        $this->contextForm->fill(['context_key' => $this->contextKey]);
         $this->loadDraft();
     }
 
@@ -185,8 +380,13 @@ class StartAssessment extends Page
         $this->runId = null;
         $this->stage = 'overview';
         $this->questionId = null;
-        $this->assessmentName = '';
-        $this->clearDraftFields();
+        $this->contextKey = 'general';
+        unset($this->run, $this->assignments, $this->currentAssignment, $this->completeness);
+        $this->startForm->fill();
+        $this->runSelectorForm->fill();
+        $this->questionPickerForm->fill();
+        $this->contextForm->fill(['context_key' => 'general']);
+        $this->answerForm->fill();
     }
 
     public function chooseQuestion(int $questionId): void
@@ -195,72 +395,86 @@ class StartAssessment extends Page
         $this->saveCurrentSilently();
         $this->questionId = $questionId;
         unset($this->currentAssignment, $this->evidenceChoices);
+        $this->questionPickerForm->fill(['question_id' => $questionId]);
         $this->contextKey = 'general';
-        $this->newContextKey = 'general';
+        $this->contextForm->fill(['context_key' => 'general']);
         $this->loadDraft();
         $this->stage = 'questions';
+    }
+
+    public function relativeQuestion(int $offset): void
+    {
+        abort_unless(in_array($offset, [-1, 1], true), 400);
+        $ids = $this->assignments->pluck('guided_question_id')->values();
+        $position = $ids->search($this->questionId);
+        if ($position === false) { return; }
+        $next = $ids->get($position + $offset);
+        if ($next) { $this->chooseQuestion((int) $next); }
     }
 
     public function openContext(): void
     {
         $this->saveCurrentSilently();
-        $context = trim($this->newContextKey);
-        if ($context === '' || $context === '*' || mb_strlen($context) > 120) {
+        $data = $this->contextForm->getState();
+        $context = trim($data['context_key']);
+        if ($context === '*' || $context === '') {
             throw ValidationException::withMessages([
-                'newContextKey' => 'Isi konteks yang valid (maksimal 120 karakter).',
+                'contextData.context_key' => 'Isi nama konteks selain *.',
             ]);
         }
         $this->contextKey = $context;
         $this->loadDraft();
     }
 
-    private function clearDraftFields(): void
-    {
-        $this->answer = null;
-        $this->notes = null;
-        $this->evidenceIds = [];
-        $this->draftVersion = 0;
-        $this->saveMessage = '';
-    }
-
     private function loadDraft(): void
     {
-        $this->clearDraftFields();
+        $value = null;
+        $notes = null;
+        $evidenceIds = [];
+        $this->draftVersion = 0;
+        $this->saveMessage = '';
         $assignment = $this->currentAssignment;
-        if (! $assignment) { return; }
 
-        $draft = GuidedAnswerDraft::query()->where('guided_assignment_id', $assignment->id)
-            ->where('respondent_id', auth()->id())->where('context_key', $this->contextKey)->first();
-        if ($draft) {
-            $this->answer = $draft->response['value'] ?? null;
-            $this->notes = $draft->notes;
-            $this->evidenceIds = $draft->evidence_ids ?? [];
-            $this->draftVersion = $draft->version;
-            $this->saveMessage = 'Draft tersimpan: '.$draft->updated_at?->format('d/m/Y H:i');
-            return;
+        if ($assignment) {
+            $draft = GuidedAnswerDraft::query()->where('guided_assignment_id', $assignment->id)
+                ->where('respondent_id', auth()->id())->where('context_key', $this->contextKey)->first();
+            if ($draft) {
+                $value = $draft->response['value'] ?? null;
+                $notes = $draft->notes;
+                $evidenceIds = $draft->evidence_ids ?? [];
+                $this->draftVersion = $draft->version;
+                $this->saveMessage = 'Draft tersimpan: '.$draft->updated_at?->format('d/m/Y H:i');
+            } else {
+                $previous = GuidedAnswer::query()->where('guided_assignment_id', $assignment->id)
+                    ->where('respondent_id', auth()->id())->where('context_key', $this->contextKey)
+                    ->latest('id')->first();
+                if ($previous) {
+                    $value = $previous->response['value'] ?? null;
+                    $notes = $previous->notes;
+                    $evidenceIds = $previous->evidences()->pluck('evidences.id')->all();
+                    $this->saveMessage = 'Menampilkan jawaban sebelumnya. Simpan dan kirim untuk merevisi.';
+                }
+            }
         }
-        $previous = GuidedAnswer::query()->where('guided_assignment_id', $assignment->id)
-            ->where('respondent_id', auth()->id())->where('context_key', $this->contextKey)
-            ->latest('id')->first();
-        if ($previous) {
-            $this->answer = $previous->response['value'] ?? null;
-            $this->notes = $previous->notes;
-            $this->evidenceIds = $previous->evidences()->pluck('evidences.id')->all();
-            $this->saveMessage = 'Menampilkan jawaban sebelumnya. Simpan dan kirim untuk membuat revisi.';
-        }
+
+        $this->answerForm->fill([
+            'value' => $value,
+            'notes' => $notes,
+            'evidence_ids' => $evidenceIds,
+        ]);
     }
-
-    public function updatedAnswer(): void { $this->saveCurrentSilently(); }
-    public function updatedNotes(): void { $this->saveCurrentSilently(); }
-    public function updatedEvidenceIds(): void { $this->saveCurrentSilently(); }
 
     private function saveCurrentSilently(): void
     {
         if (! $this->currentAssignment || $this->run?->locked_at) { return; }
         try {
+            $data = $this->answerForm->getState();
             $draft = app(GuidedWizardDraftService::class)->saveDraft(
                 $this->currentAssignment, auth()->user(), $this->contextKey,
-                $this->answer, $this->notes, $this->evidenceIds, $this->draftVersion
+                isset($data['value']) ? (string) $data['value'] : null,
+                $data['notes'] ?? null,
+                $data['evidence_ids'] ?? [],
+                $this->draftVersion
             );
             $this->draftVersion = $draft->version;
             $this->saveMessage = 'Tersimpan: '.now()->format('H:i:s');
@@ -292,8 +506,10 @@ class StartAssessment extends Page
         $next = $this->assignments->first(fn ($a) => $a->status !== 'submitted');
         if ($next && $next->guided_question_id !== $this->questionId) {
             $this->questionId = $next->guided_question_id;
-            $this->contextKey = $this->newContextKey = 'general';
+            $this->contextKey = 'general';
         }
+        $this->questionPickerForm->fill(['question_id' => $this->questionId]);
+        $this->contextForm->fill(['context_key' => $this->contextKey]);
         $this->loadDraft();
     }
 
@@ -301,10 +517,12 @@ class StartAssessment extends Page
     {
         $run = $this->run;
         abort_unless($run && $run->isMember(auth()->user(), ['coordinator']), 403);
-        $this->validate(['contributorId' => ['required', 'integer']]);
-        app(GuidedWizardDraftService::class)->delegate($run, auth()->user(),
-            User::findOrFail($this->contributorId), $this->delegateQuestionId);
-        $this->contributorId = null;
+        $data = $this->delegateForm->getState();
+        app(GuidedWizardDraftService::class)->delegate(
+            $run, auth()->user(), User::findOrFail((int) $data['contributor_id']),
+            filled($data['question_id'] ?? null) ? (int) $data['question_id'] : null
+        );
+        $this->delegateForm->fill();
         Notification::make()->success()->title('Penugasan diberikan kepada kontributor')->send();
     }
 
@@ -313,27 +531,23 @@ class StartAssessment extends Page
         $run = $this->run;
         abort_unless($run && ! $run->locked_at && $run->isMember(auth()->user(), ['coordinator'])
             && auth()->user()->can('guided.assessment.manage'), 403);
-        $this->validate([
-            'scopeKind' => ['required', 'in:asset,activity'],
-            'scopeTitle' => ['required', 'string', 'max:255'],
-            'scopeCategory' => ['nullable', 'string', 'max:255'],
-        ]);
+        $data = $this->scopeForm->getState();
         GuidedScopeItem::query()->create([
             'guided_assessment_id' => $run->id,
-            'kind' => $this->scopeKind, 'title' => trim($this->scopeTitle),
-            'category' => $this->scopeCategory, 'notes' => $this->scopeNotes,
+            'kind' => $data['kind'],
+            'title' => trim($data['title']),
+            'category' => $data['category'] ?? null,
+            'notes' => $data['notes'] ?? null,
             'created_by' => auth()->id(),
         ]);
-        $this->scopeTitle = '';
-        $this->scopeCategory = '';
-        $this->scopeNotes = '';
+        $this->scopeForm->fill(['kind' => 'asset']);
         Notification::make()->success()->title('Data konteks tersimpan')->send();
     }
 
     public function showStage(string $stage): void
     {
         abort_unless(in_array($stage, ['questions', 'context', 'review', 'results'], true), 404);
-        $this->saveCurrentSilently();
+        if ($this->stage === 'questions') { $this->saveCurrentSilently(); }
         $this->stage = $stage;
     }
 
@@ -345,6 +559,19 @@ class StartAssessment extends Page
         $this->stage = 'results';
         unset($this->run, $this->completeness);
         Notification::make()->success()->title('Asesmen dikunci dan siap diekspor sebagai FINAL')->send();
+    }
+
+    public function finalizeAction(): Action
+    {
+        return Action::make('finalize')
+            ->label('Tetapkan Final')
+            ->icon('heroicon-o-lock-closed')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('Finalisasi asesmen')
+            ->modalDescription('Asesmen yang sudah final tidak dapat disunting. Seluruh penilaian harus disetujui dan dipublikasikan.')
+            ->modalSubmitActionLabel('Kunci Asesmen')
+            ->action(fn () => $this->finalize());
     }
 
     public function downloadWorkbook()
