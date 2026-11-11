@@ -25,12 +25,12 @@ class CorrectiveActionWorkflowService
             throw ValidationException::withMessages(['status' => 'Tindakan ini tidak sedang dalam tahap pengerjaan.']);
         }
 
-        DB::transaction(function () use ($action): void {
+        DB::transaction(function () use ($action, $actor): void {
             $action->update([
                 'status' => 'verification',
                 // Auto-assign responsibility when the original CAPA had no PIC.
                 // The submitter may no longer be their own verifier.
-                'owner_id' => $action->owner_id ?? auth()->id(),
+                'owner_id' => $action->owner_id ?? $actor->id,
                 'completed_at' => now(),
                 'effectiveness_status' => 'pending',
                 'verified_by' => null,
