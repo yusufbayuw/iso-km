@@ -134,15 +134,20 @@ class ModelScopeAuthorizationService
         );
     }
 
-    public function scopeAvailableSystems(Builder $query, ?User $user): Builder
+    public function scopeAvailableSystems(Builder $query, ?User $user, ?int $currentRecordSystemId = null): Builder
     {
         if (! $user) { return $query->whereRaw('1 = 0'); }
         if ($this->isGlobal($user)) { return $query; }
 
-        return $query->where(function (Builder $systems) use ($user): void {
+        return $query->where(function (Builder $systems) use ($user, $currentRecordSystemId): void {
             $systems->whereHas('scope', fn (Builder $scopes) =>
                 $scopes->whereNull('owner_id')->orWhere('owner_id', $user->id))
                 ->orWhereIn('id', $this->guidedCoordinatorSystemIds($user));
+            // An assigned PIC must still see the *current* system label while
+            // editing their authorized record in somebody else's scope.
+            if ($currentRecordSystemId) {
+                $systems->orWhere('id', $currentRecordSystemId);
+            }
         });
     }
 
