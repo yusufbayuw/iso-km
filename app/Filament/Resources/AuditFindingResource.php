@@ -6,9 +6,12 @@ use App\Filament\Resources\AuditFindingResource\Pages;
 use App\Models\AuditFinding;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\Audit;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class AuditFindingResource extends Resource
 {
@@ -22,13 +25,15 @@ class AuditFindingResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('audit_id')->label('Audit')->relationship('audit', 'title')->required()->searchable()->preload(),
+            Forms\Components\Select::make('audit_id')->label('Audit')->relationship('audit', 'title')->required()->searchable()->preload()->live(),
             Forms\Components\TextInput::make('code')->label('Kode Finding')->required()->unique(ignoreRecord: true),
             Forms\Components\Select::make('finding_type')->label('Jenis Finding')->options(['nonconformity' => 'Nonconformity','observation' => 'Observation','opportunity' => 'Opportunity for Improvement','conforming' => 'Conforming'])->required()->default('nonconformity'),
             Forms\Components\Select::make('severity')->label('Severity')->options(['major' => 'Major','minor' => 'Minor']),
             Forms\Components\TextInput::make('title')->label('Judul')->required()->columnSpanFull(),
-            Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title')->searchable()->preload(),
-            Forms\Components\Select::make('control_id')->label('Control')->relationship('control', 'title')->searchable()->preload(),
+            Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', Audit::query()->find($get('audit_id'))?->managementSystem?->standard_id ?? -1))->searchable()->preload(),
+            Forms\Components\Select::make('control_id')->label('Control')->relationship('control', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', Audit::query()->find($get('audit_id'))?->managementSystem?->standard_id ?? -1))->searchable()->preload(),
             Forms\Components\Select::make('owner_id')->label('PIC')->relationship('owner', 'name')->searchable()->preload(),
             Forms\Components\DatePicker::make('due_date')->label('Due Date')->native(false),
             Forms\Components\Select::make('status')->label('Status')->options(['open' => 'Open','analysis' => 'Root Cause Analysis','action' => 'Corrective Action','verification' => 'Verification','closed' => 'Closed'])->required()->default('open'),

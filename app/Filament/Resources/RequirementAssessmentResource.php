@@ -6,9 +6,11 @@ use App\Filament\Resources\RequirementAssessmentResource\Pages;
 use App\Models\RequirementAssessment;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class RequirementAssessmentResource extends Resource
 {
@@ -22,8 +24,9 @@ class RequirementAssessmentResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
-            Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title')->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('requirement_id')->label('Requirement')->relationship('requirement', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->required()->searchable()->preload(),
             Forms\Components\Select::make('status')->label('Status')->options(['not_assessed' => 'Belum Dinilai','nonconformant' => 'Tidak Sesuai','partial' => 'Sebagian Sesuai','conformant' => 'Sesuai','not_applicable' => 'Tidak Berlaku'])->required(),
             Forms\Components\Select::make('owner_id')->label('PIC')->relationship('owner', 'name')->searchable()->preload(),
             Forms\Components\DateTimePicker::make('last_assessed_at')->label('Terakhir Dinilai')->seconds(false),

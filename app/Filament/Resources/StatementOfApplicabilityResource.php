@@ -7,6 +7,7 @@ use App\Models\StatementOfApplicability;
 use App\Services\ControlAssuranceService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -24,8 +25,10 @@ class StatementOfApplicabilityResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->required()->searchable()->preload(),
-            Forms\Components\Select::make('control_id')->label('Control')->relationship('control', 'title', modifyQueryUsing: fn (Builder $query) => $query->where('is_group', false))->required()->searchable()->preload(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->required()->searchable()->preload(),
+            Forms\Components\Select::make('control_id')->label('Control')->relationship('control', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('is_group', false)
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->required()->searchable()->preload(),
             Forms\Components\Toggle::make('applicable')->label('Applicable')->default(true),
             Forms\Components\Select::make('implementation_status')->label('Status Implementasi')->options(['not_started' => 'Belum Dimulai','planned' => 'Direncanakan','in_progress' => 'Dalam Proses','implemented' => 'Terimplementasi','not_applicable' => 'Tidak Berlaku'])->required()->default('not_started'),
             Forms\Components\Select::make('owner_id')->label('Control Owner')->relationship('owner', 'name')->searchable()->preload(),

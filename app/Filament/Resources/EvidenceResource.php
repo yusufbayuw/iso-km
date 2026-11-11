@@ -7,6 +7,7 @@ use App\Models\Evidence;
 use App\Services\EvidenceLifecycleService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use App\Models\ManagementSystem;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -24,7 +25,7 @@ class EvidenceResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->searchable()->preload()->required(),
+            Forms\Components\Select::make('management_system_id')->label('Sistem Manajemen')->relationship('managementSystem', 'name')->live()->searchable()->preload()->required(),
             Forms\Components\TextInput::make('title')->label('Judul Evidence')->required()->columnSpanFull(),
             Forms\Components\Select::make('type')->label('Jenis')->options(['record' => 'Rekaman','screenshot' => 'Screenshot','report' => 'Laporan','log' => 'Log','configuration' => 'Konfigurasi','other' => 'Lainnya'])->required(),
             Forms\Components\TextInput::make('source')->label('Sumber')->placeholder('Sistem, unit, vendor, atau proses'),
@@ -37,8 +38,10 @@ class EvidenceResource extends Resource
             Forms\Components\DatePicker::make('expires_at')->label('Berlaku Sampai')->native(false),
             Forms\Components\Select::make('status')->label('Lifecycle')->options(['active' => 'Aktif','expired' => 'Kedaluwarsa','archived' => 'Arsip'])->default('active')->required(),
             Forms\Components\Placeholder::make('verification_status_display')->label('Status Verifikasi')->content(fn (?Evidence $record): string => $record?->verification_status ?? 'pending'),
-            Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
-            Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title')->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('requirements')->label('Requirement Terkait')->relationship('requirements', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
+            Forms\Components\Select::make('controls')->label('Control Terkait')->relationship('controls', 'title', modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                ->where('standard_id', ManagementSystem::query()->whereKey($get('management_system_id'))->value('standard_id') ?? -1))->multiple()->searchable()->preload()->columnSpanFull(),
             Forms\Components\Textarea::make('description')->label('Deskripsi')->columnSpanFull(),
             Forms\Components\Placeholder::make('verification_notes_display')->label('Catatan Verifikasi')->content(fn (?Evidence $record): string => $record?->verification_notes ?: '-')->columnSpanFull(),
         ])->columns(2);
