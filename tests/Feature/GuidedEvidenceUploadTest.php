@@ -158,6 +158,54 @@ class GuidedEvidenceUploadTest extends TestCase
         $this->assertSame([$evidence->id], $draft->evidence_ids);
     }
 
+    public function test_save_and_send_buttons_process_pending_upload_without_duplicate_records(): void
+    {
+        extract($this->fixture());
+        foreach (['guided.assessment.view', 'portal.access'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+        $actor->givePermissionTo(['guided.assessment.view', 'portal.access']);
+
+        $page = \Livewire\Livewire::test(\App\Filament\Pages\StartAssessment::class)
+            ->set('answerData.value', 'yes')
+            ->set('uploadData.files', [
+                UploadedFile::fake()->create('inline.pdf', 10, 'application/pdf'),
+            ])
+            ->call('saveDraft')
+            ->assertHasNoErrors();
+
+        $evidence = Evidence::query()->firstOrFail();
+        $draft = \App\Models\GuidedAnswerDraft::query()
+            ->where('guided_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertContains($evidence->id, $draft->evidence_ids);
+
+        $page->call('submitAnswer')->assertHasNoErrors();
+        $answer = \App\Models\GuidedAnswer::query()
+            ->where('guided_assignment_id', $assignment->id)->firstOrFail();
+        $this->assertSame([$evidence->id], $answer->evidences->modelKeys());
+        $this->assertDatabaseCount('evidences', 1);
+    }
+
+    public function test_another_user_cannot_upload_into_someone_elses_assignment(): void
+    {
+        extract($this->fixture());
+        $intruder = User::factory()->create();
+        $this->actingAs($intruder);
+
+        try {
+            app(GuidedEvidenceUploadService::class)->uploadAndAttach(
+                $assignment, $intruder, 'general', 'yes', null, [], 0,
+                [UploadedFile::fake()->create('foreign.pdf', 10, 'application/pdf')]
+            );
+            $this->fail('An unrelated user must not be able to upload evidence.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('authorization', $exception->errors());
+        }
+
+        $this->assertDatabaseCount('evidences', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles('iso/evidence'));
+    }
+
     public function test_invalid_file_is_rejected_without_creating_evidence(): void
     {
         extract($this->fixture());
