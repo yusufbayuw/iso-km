@@ -25,7 +25,9 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        if (! $this->is_active) {
+        // A newly-created Eloquent model may not have loaded the database default
+        // for is_active yet. Only an explicit false means the account is disabled.
+        if ($this->is_active === false) {
             return false;
         }
 
