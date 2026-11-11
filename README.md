@@ -395,7 +395,7 @@ CRUD resource tetap memakai permission Filament Shield seperti `view_any_trainin
 
 `User::canAccessPanel()` memakai `portal.access` setelah permission tersebut tersedia. Implementasi dibuat deployment-safe: sebelum permission pertama kali disemai, akses existing tidak langsung terkunci; setelah seeder berjalan, permission menjadi gate panel.
 
-> `IsoRolePermissionSeeder` memakai `syncPermissions()` pada role template bawaan. Pada production yang role template-nya sudah dikustom manual, review perubahan permission sebelum menjalankan seeder ulang.
+> `IsoRolePermissionSeeder` hanya memakai `syncPermissions()` saat role template **baru dibuat**. Role existing tidak dicabut izin lamanya, dan penambahan baseline non-Guided perlu opt-in. Pada seeding pertama kali, hak masuk panel pengguna existing dipertahankan. Lihat `docs/ROLE_PERMISSION_BOOTSTRAP.md` sebelum menjalankan di production.
 
 ## Audit trail
 
@@ -466,7 +466,7 @@ php artisan optimize:clear
 php artisan optimize
 ```
 
-PHP extension `zip` diperlukan untuk internal maupun external audit pack. Review catatan `syncPermissions()` sebelum menjalankan permission seeder pada role yang sudah dikustom di production.
+PHP extension `zip` diperlukan untuk internal maupun external audit pack. Tinjau izin role dan akun existing sebelum menjalankan permission seeder; lihat `docs/ROLE_PERMISSION_BOOTSTRAP.md`.
 
 ## Testing
 
