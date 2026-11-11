@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AuditFindingResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = AuditFinding::class;
     protected static ?string $navigationIcon = 'heroicon-o-document-magnifying-glass';
     protected static ?string $navigationGroup = 'Audit & Improvement';

@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class EvidenceResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Evidence::class;
     protected static ?string $navigationIcon = 'heroicon-o-paper-clip';
     protected static ?string $navigationGroup = 'Assurance';

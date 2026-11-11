@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class ManagementSystemResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = ManagementSystem::class;
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
     protected static ?string $navigationGroup = 'Fondasi ISO';

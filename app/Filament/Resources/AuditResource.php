@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AuditResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Audit::class;
     protected static ?string $navigationIcon = 'heroicon-o-magnifying-glass-circle';
     protected static ?string $navigationGroup = 'Audit & Improvement';

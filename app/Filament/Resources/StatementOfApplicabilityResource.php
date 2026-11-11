@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class StatementOfApplicabilityResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = StatementOfApplicability::class;
     protected static ?string $navigationIcon = 'heroicon-o-table-cells';
     protected static ?string $navigationGroup = 'Implementasi & Kepatuhan';

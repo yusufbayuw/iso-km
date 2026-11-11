@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class RequirementAssessmentResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = RequirementAssessment::class;
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
     protected static ?string $navigationGroup = 'Implementasi & Kepatuhan';

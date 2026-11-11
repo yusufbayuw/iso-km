@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class RiskResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\ScopesByManagementSystem;
+
     protected static ?string $model = Risk::class;
     protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
     protected static ?string $navigationGroup = 'Risiko';
