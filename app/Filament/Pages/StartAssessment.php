@@ -231,10 +231,14 @@ class StartAssessment extends Page implements HasForms
                 ->label('Kontributor')
                 ->required()
                 ->searchable()
+                ->preload()
+                ->options(fn (): array => User::query()
+                    ->permission('guided.answer.submit')
+                    ->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                 ->getSearchResultsUsing(fn (string $search): array => User::query()
                     ->permission('guided.answer.submit')
                     ->where('name', 'like', '%'.$search.'%')
-                    ->orderBy('name')->limit(30)->pluck('name', 'id')->all())
+                    ->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                 ->getOptionLabelUsing(fn ($value): ?string =>
                     User::query()->whereKey($value)->value('name'))
                 ->helperText('Hanya pengguna dengan izin menjawab yang dapat ditugaskan.'),
