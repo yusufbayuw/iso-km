@@ -133,6 +133,20 @@ class GuidedWizardIntegrationTest extends TestCase
         $this->assertDatabaseCount('guided_answers', 2);
         $this->assertDatabaseCount('guided_answer_drafts', 1);
 
+        // Reopening the same draft must not create a phantom new revision.
+        $unchanged = $service->saveDraft($assignment, $actor, 'general',
+            'Diterapkan Sebagian', '', [], 3);
+        $this->assertSame(3, $unchanged->version);
+
+        // A second asset/system context is independent, not silently completed.
+        $service->saveDraft($assignment, $actor, 'app-b',
+            'Belum Diterapkan', 'Context-specific result', [], 0);
+        $completion = app(\App\Services\GuidedWizardCompletenessService::class)->report($run);
+        $this->assertSame(1, $completion['draft_contexts_pending']);
+        $service->submit($assignment, $actor, 'app-b');
+        $completion = app(\App\Services\GuidedWizardCompletenessService::class)->report($run);
+        $this->assertSame(0, $completion['draft_contexts_pending']);
+
         $template = GuidedExportTemplate::query()->firstOrFail();
         $path = app(GuidedWorkbookExportService::class)->export($run, $template, $actor, false);
         $this->assertTrue(Storage::disk('local')->exists($path));
