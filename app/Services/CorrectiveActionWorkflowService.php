@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditFinding;
 use App\Models\CorrectiveAction;
 use App\Models\User;
+use App\Services\ModelScopeAuthorizationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,6 +15,9 @@ class CorrectiveActionWorkflowService
     {
         // Newly created Eloquent instances may not have loaded DB defaults.
         $action = $action->fresh() ?? $action;
+        if (! app(ModelScopeAuthorizationService::class)->canAccess($actor, $action)) {
+            throw ValidationException::withMessages(['authorization' => 'CAPA berada di luar lingkup kewenangan Anda.']);
+        }
         if ((int) $action->owner_id !== (int) $actor->id && ! $actor->can('capa.manage')) {
             throw ValidationException::withMessages(['authorization' => 'Anda tidak berwenang menyerahkan tindakan perbaikan ini.']);
         }
@@ -24,6 +28,9 @@ class CorrectiveActionWorkflowService
         DB::transaction(function () use ($action): void {
             $action->update([
                 'status' => 'verification',
+                // Auto-assign responsibility when the original CAPA had no PIC.
+                // The submitter may no longer be their own verifier.
+                'owner_id' => $action->owner_id ?? auth()->id(),
                 'completed_at' => now(),
                 'effectiveness_status' => 'pending',
                 'verified_by' => null,
@@ -40,7 +47,13 @@ class CorrectiveActionWorkflowService
         if (! $actor->can('capa.verify')) {
             throw ValidationException::withMessages(['authorization' => 'Anda tidak memiliki kewenangan verifikasi CAPA.']);
         }
-        if ($action->owner_id !== null && (int) $action->owner_id === (int) $actor->id) {
+        if (! app(ModelScopeAuthorizationService::class)->canAccess($actor, $action)) {
+            throw ValidationException::withMessages(['authorization' => 'CAPA berada di luar lingkup kewenangan Anda.']);
+        }
+        if ($action->owner_id === null) {
+            throw ValidationException::withMessages(['owner_id' => 'CAPA perlu memiliki PIC sebelum diverifikasi.']);
+        }
+        if ((int) $action->owner_id === (int) $actor->id) {
             throw ValidationException::withMessages(['authorization' => 'Pelaksana tidak boleh memverifikasi tindakan sendiri.']);
         }
         if ($action->status !== 'verification' || blank(trim($notes))) {
@@ -82,9 +95,18 @@ class CorrectiveActionWorkflowService
             && $action->verified_at !== null
         );
         $readyToClose = $allEffective && filled($finding->root_cause);
+        // Verification is the aggregate stage only when NO CAPA is still
+        // waiting for execution. One submitted CAPA must not mask open work.
+        $readyForAggregateVerification = $actions->every(fn (CorrectiveAction $action): bool =>
+            $action->status === 'verification'
+            || ($action->status === 'completed'
+                && $action->effectiveness_status === 'effective'
+                && $action->verified_by !== null
+                && $action->verified_at !== null)
+        );
         $nextStatus = $readyToClose
             ? 'closed'
-            : ($allEffective || $actions->contains('status', 'verification') ? 'verification' : 'action');
+            : ($readyForAggregateVerification ? 'verification' : 'action');
 
         if ($finding->status !== $nextStatus) {
             // Preserve all actions/history; only project the aggregate status.
