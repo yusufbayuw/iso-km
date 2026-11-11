@@ -44,6 +44,26 @@ php artisan db:seed --class=Iso27001GuidedStarterSeeder --force
 Seeder tidak membuat `ORG`, `ISMS`, aset, risiko, jawaban, atau nilai
 penerapan yang berasal dari workbook organisasi contoh.
 
+## Bank Pertanyaan: urutan persiapan sebelum memulai
+
+Wizard hanya dapat membuat asesmen baru jika ada bank pertanyaan dengan status
+`published` sesuai standar sistem yang dipilih. Jika bank masih `draft`,
+halaman Mulai / Lanjutkan Asesmen menampilkan status **Bank Belum Terbit**.
+Saat tombol Mulai ditekan, alasan penolakan juga muncul sebagai notifikasi
+Filament dan kesalahan form. Jangan menjalankan ulang seeder untuk mengatasinya.
+
+| Action di Bank Pertanyaan | Fungsi dan konsekuensi |
+| --- | --- |
+| Buat Pertanyaan Awal | Tambahkan pertanyaan induk yang belum ada dari master standar. Tidak menghapus atau menggandakan pertanyaan yang sudah ada. Jika 216 pertanyaan awal ISO 27001 sudah tersedia, biasanya tidak perlu lagi. |
+| Coverage | Audit cakupan klausul, kontrol, pemetaan, percabangan, dan duplikasi; tidak mengubah data. |
+| Terbitkan | Validasi cakupan lalu kunci bank untuk pemakaian asesmen baru. Setelah terbit, isi bank tidak dapat diubah langsung; perubahan memerlukan versi baru. |
+| Ubah Info Bank | Ubah metadata seperti nama bank. Isi pertanyaan dikelola melalui menu Pertanyaan & Kriteria. |
+
+**Prosedur:** periksa isi dan pilihan jawaban di Pertanyaan & Kriteria →
+Coverage → setelah lengkap dan substansi disetujui, Terbitkan → Mulai Asesmen.
+Jangan menerbitkan pertanyaan generik seeder tanpa review substansi oleh pemilik
+standar yang berwenang.
+
 ## Alur pengguna
 
 1. Klik **Mulai / Lanjutkan Asesmen**.
