@@ -121,6 +121,13 @@ class GuidedWizardDraftService
                 throw ValidationException::withMessages(['draft' =>
                     'Versi draft tidak sesuai. Muat ulang jawaban.']);
             }
+            if ($draft && $draft->response === ['value' => $value]
+                && $draft->notes === $notes
+                && ($draft->evidence_ids ?? []) === $evidenceIds) {
+                // Navigation/autosave of unchanged data must not fabricate a
+                // pending revision or invalidate an already submitted answer.
+                return $draft;
+            }
             if (! $draft) {
                 return GuidedAnswerDraft::query()->create([
                     'guided_assessment_id' => $assignment->guided_assessment_id,
