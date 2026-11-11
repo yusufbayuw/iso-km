@@ -417,6 +417,7 @@ class GuidedWorkbookExportService
         if ($source === 'assessment') {
             return match ($field) {
                 'name' => $run->name,
+                'report_status' => $final ? 'FINAL' : 'DRAFT - BELUM DIVALIDASI',
                 'management_system' => $run->system?->name ?? '',
                 'scope', 'unit_name' => $run->system?->scope?->name,
                 'scope_description' => $run->system?->scope?->description,
@@ -436,10 +437,16 @@ class GuidedWorkbookExportService
         }
         $decision = $decisions[$source.':'.$code] ?? null;
         if (! $decision) {
-            if ($final || ($mapping['required'] ?? false)) {
+            if ($final) {
                 throw ValidationException::withMessages(['mapping' => 'Tidak ada penilaian yang disetujui untuk '.$source.':'.$code]);
             }
-            return null;
+            // Draft reports are always downloadable; do not turn absent
+            // or unapproved evidence into a fabricated compliance result.
+            return match ($field) {
+                'status' => 'Belum Dinilai',
+                'notes_and_evidence' => 'Draft: belum dinilai atau masih menunggu review.',
+                default => null,
+            };
         }
         return match ($field) {
             'status' => match ($decision->proposed_status) {
