@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TrainingProgram extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected $fillable = ['management_system_id','code','title','category','owner_id','target_audience','delivery_method','mandatory','recurrence_months','validity_months','status','next_review_at','description'];

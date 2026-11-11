@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Objective extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected $fillable = ['management_system_id','code','title','description','owner_id','metric','unit','baseline_value','target_value','direction','frequency','status','start_date','end_date'];

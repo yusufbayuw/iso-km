@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use App\Services\ManagementSystemIntegrityService;
@@ -9,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RequirementAssessment extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected static function booted(): void

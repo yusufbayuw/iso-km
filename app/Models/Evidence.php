@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\EnforcesManagementSystemScope;
+
 use App\Models\Concerns\AuditsChanges;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Evidence extends Model
 {
+    use EnforcesManagementSystemScope;
+
     use AuditsChanges;
 
     protected $table = 'evidences';
