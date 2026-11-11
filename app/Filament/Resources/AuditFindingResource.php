@@ -42,11 +42,15 @@ class AuditFindingResource extends Resource
             Forms\Components\Textarea::make('description')->label('Pernyataan Finding / Bukti Objektif')->required()->columnSpanFull(),
             Forms\Components\Textarea::make('root_cause')->label('Root Cause')->columnSpanFull(),
             Forms\Components\Textarea::make('correction')->label('Correction / Immediate Fix')->columnSpanFull(),
-            Forms\Components\Repeater::make('correctiveActions')->label('Corrective Actions')->relationship()->schema([
+            Forms\Components\Repeater::make('correctiveActions')->label('Corrective Actions')->relationship()
+                // Historical actions are immutable evidence of remediation.
+                ->deletable(false)->reorderable(false)->schema([
                 Forms\Components\Textarea::make('action')->label('Action')->required()->columnSpanFull(),
                 Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),
                 Forms\Components\DatePicker::make('due_date')->label('Due Date')->native(false),
-                Forms\Components\Select::make('status')->label('Status')->options(['open' => 'Open','in_progress' => 'In Progress','verification' => 'Verification','completed' => 'Completed'])->required()->default('open'),
+                Forms\Components\Select::make('status')->label('Status')->options(['open' => 'Open','in_progress' => 'In Progress','verification' => 'Verification','completed' => 'Completed'])
+                    ->default('open')->disabled()->dehydrated(false)
+                    ->helperText('Status dicatat otomatis melalui aksi pada CAPA Tracker.'),
                 Forms\Components\Placeholder::make('verification_hint')->label('Verifikasi')
                     ->content('Gunakan aksi Verifikasi Efektivitas pada CAPA Tracker setelah pekerjaan selesai.')
                     ->columnSpanFull(),
