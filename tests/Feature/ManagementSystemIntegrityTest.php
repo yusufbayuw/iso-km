@@ -45,6 +45,22 @@ class ManagementSystemIntegrityTest extends TestCase
         $this->assertRejected(fn () => AuditFinding::create(['audit_id' => $audit->id, 'code' => 'NCR-001', 'title' => 'Wrong', 'description' => 'Wrong', 'control_id' => $controlB->id]), 'control_id');
     }
 
+    public function test_system_standard_and_scope_cannot_be_switched_after_operational_data_exists(): void
+    {
+        $scopeA = ComplianceScope::create(['code' => 'A', 'name' => 'Scope A']);
+        $scopeB = ComplianceScope::create(['code' => 'B', 'name' => 'Scope B']);
+        $stdA = Standard::create(['code' => 'STD-A', 'name' => 'Standard A']);
+        $stdB = Standard::create(['code' => 'STD-B', 'name' => 'Standard B']);
+        $system = ManagementSystem::create(['standard_id' => $stdA->id, 'compliance_scope_id' => $scopeA->id, 'code' => 'SYS', 'name' => 'System']);
+        $requirement = Requirement::create(['standard_id' => $stdA->id, 'code' => '4', 'title' => 'Context']);
+        RequirementAssessment::create(['management_system_id' => $system->id, 'requirement_id' => $requirement->id]);
+
+        $this->assertRejected(fn () => $system->update(['standard_id' => $stdB->id]), 'standard_id');
+        $this->assertRejected(fn () => $system->refresh()->update(['compliance_scope_id' => $scopeB->id]), 'compliance_scope_id');
+        $this->assertSame($stdA->id, $system->fresh()->standard_id);
+        $this->assertSame($scopeA->id, $system->fresh()->compliance_scope_id);
+    }
+
     private function assertRejected(callable $attempt, string $field): void
     {
         try {

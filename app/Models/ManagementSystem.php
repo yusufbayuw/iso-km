@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,6 +11,36 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ManagementSystem extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(function (self $system): void {
+            if (! $system->isDirty(['standard_id', 'compliance_scope_id'])) {
+                return;
+            }
+
+            $hasOperationalData = $system->requirementAssessments()->exists()
+                || $system->soaEntries()->exists()
+                || $system->documents()->exists()
+                || $system->evidences()->exists()
+                || $system->evidenceSchedules()->exists()
+                || $system->evidenceRequests()->exists()
+                || $system->evidenceReuses()->exists()
+                || $system->risks()->exists()
+                || $system->audits()->exists()
+                || $system->objectives()->exists()
+                || $system->managementReviews()->exists()
+                || $system->trainingPrograms()->exists()
+                || $system->supplierAssessments()->exists();
+
+            if ($hasOperationalData) {
+                throw ValidationException::withMessages([
+                    $system->isDirty('standard_id') ? 'standard_id' : 'compliance_scope_id' =>
+                        'Standar atau lingkup sistem yang sudah memiliki data operasional tidak boleh dipindah tanpa migrasi terkontrol.',
+                ]);
+            }
+        });
+    }
+
     protected $fillable = ['standard_id', 'compliance_scope_id', 'code', 'name', 'status', 'target_certification_date', 'certified_at', 'certificate_expires_at', 'description'];
     protected function casts(): array { return ['target_certification_date' => 'date', 'certified_at' => 'date', 'certificate_expires_at' => 'date']; }
     public function standard(): BelongsTo { return $this->belongsTo(Standard::class); }
