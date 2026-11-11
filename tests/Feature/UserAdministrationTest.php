@@ -95,7 +95,10 @@ class UserAdministrationTest extends TestCase
         $this->assertTrue($policy->viewAny($admin));
         $this->assertTrue($policy->update($admin, $target));
         $this->assertFalse($policy->delete($admin, $target));
+        // Fresh Eloquent instances may have a null attribute until reloaded.
+        // Both fresh and reloaded active accounts must retain panel access.
         $this->assertTrue($admin->canAccessPanel(Filament::getPanel('portal')));
+        $this->assertTrue($admin->fresh()->canAccessPanel(Filament::getPanel('portal')));
 
         $admin->update(['is_active' => false]);
         $this->assertFalse($admin->fresh()->canAccessPanel(Filament::getPanel('portal')));
