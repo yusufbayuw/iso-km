@@ -25,9 +25,13 @@ class GlobalFilamentSelectTest extends TestCase
             'published' => 'Published',
         ]);
 
-        $this->assertTrue($filter->isSearchable());
+        $this->assertTrue($filter->getSearchable());
         $this->assertTrue($filter->isPreloaded());
         $this->assertFalse($filter->isNative());
         $this->assertSame(50, $filter->getOptionsLimit());
+
+        $filterField = $filter->getFormField();
+        $this->assertTrue($filterField->isSearchable());
+        $this->assertTrue($filterField->isPreloaded());
     }
 }
