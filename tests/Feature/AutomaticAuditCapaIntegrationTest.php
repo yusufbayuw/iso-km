@@ -118,6 +118,8 @@ class AutomaticAuditCapaIntegrationTest extends TestCase
 
         $this->assertSame('verification', $finding->fresh()->status);
         $finding->update(['root_cause' => 'Proses kontrol sebelumnya tidak terdokumentasi.']);
+        $this->assertNotNull($finding->fresh()->root_cause);
+        $this->assertSame(2, $finding->fresh()->correctiveActions()->where('status', 'completed')->count());
         $this->assertSame('closed', $finding->fresh()->status);
     }
 

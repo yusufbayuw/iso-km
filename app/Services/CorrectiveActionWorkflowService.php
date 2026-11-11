@@ -59,6 +59,9 @@ class CorrectiveActionWorkflowService
 
     public function syncFinding(AuditFinding $finding): void
     {
+        // CAPA actions can update the same finding through another model
+        // instance. Always reconcile against the persisted current state.
+        $finding = $finding->fresh() ?? $finding;
         if ($finding->finding_type !== 'nonconformity') {
             return;
         }
