@@ -529,6 +529,7 @@ class StartAssessment extends Page implements HasForms
     public function chooseRun(int $id): void
     {
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $run = $this->visibleRun($id);
         abort_unless($run, 403);
         $this->openRun($run);
@@ -538,6 +539,7 @@ class StartAssessment extends Page implements HasForms
     {
         abort_unless(count($this->systems) > 0, 403);
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $this->runId = null;
         $this->stage = 'overview';
         $this->questionId = null;
@@ -555,6 +557,7 @@ class StartAssessment extends Page implements HasForms
     {
         if (! $this->assignments->contains('guided_question_id', $questionId)) { abort(403); }
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $this->questionId = $questionId;
         unset($this->currentAssignment, $this->evidenceChoices);
         $this->questionPickerForm->fill(['question_id' => $questionId]);
@@ -577,6 +580,7 @@ class StartAssessment extends Page implements HasForms
     public function openContext(): void
     {
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $data = $this->contextForm->getState();
         $context = trim($data['context_key']);
         if ($context === '*' || $context === '') {
@@ -680,6 +684,7 @@ class StartAssessment extends Page implements HasForms
             );
 
             $this->draftVersion = $draft->version;
+            $this->resetValidation('uploadData.files');
             $this->saveMessage = 'Draft dan bukti tersimpan: '.now()->format('H:i:s');
             $this->answerForm->fill([
                 'value' => $answer['value'] ?? null,
@@ -770,7 +775,10 @@ class StartAssessment extends Page implements HasForms
     public function showStage(string $stage): void
     {
         abort_unless(in_array($stage, ['questions', 'context', 'review', 'results'], true), 404);
-        if ($this->stage === 'questions') { $this->saveCurrentSilently(); }
+        if ($this->stage === 'questions') {
+            $this->saveCurrentSilently();
+            if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
+        }
         $this->stage = $stage;
     }
 
