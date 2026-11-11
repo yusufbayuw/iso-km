@@ -15,16 +15,22 @@ class User extends Authenticatable implements FilamentUser
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles;
 
-    protected $fillable = ['name', 'email', 'password'];
+    protected $fillable = ['name', 'username', 'email', 'password', 'is_active'];
     protected $hidden = ['password', 'remember_token'];
 
     protected function casts(): array
     {
-        return ['email_verified_at' => 'datetime', 'password' => 'hashed'];
+        return ['email_verified_at' => 'datetime', 'password' => 'hashed', 'is_active' => 'boolean'];
     }
 
     public function canAccessPanel(Panel $panel): bool
     {
+        // A newly-created Eloquent model may not have loaded the database default
+        // for is_active yet. Only an explicit false means the account is disabled.
+        if ($this->is_active === false) {
+            return false;
+        }
+
         // Deployment-safe transition: before the permission seeder has run, preserve
         // existing access. Once portal.access exists, permission becomes the gate.
         $permissionExists = Permission::query()->where('guard_name', 'web')->where('name', 'portal.access')->exists();

@@ -37,6 +37,15 @@ class IsoRolePermissionSeeder extends Seeder
 
         $allPermissions = array_values(array_unique(array_merge($workflowPermissions, ...array_values($crudByEntity))));
         foreach ($allPermissions as $permission) { Permission::findOrCreate($permission, 'web'); }
+        // Keep account / Shield role administration out of broad ISO role templates.
+        $administrationPermissions = array_merge(
+            $this->crudPermissions('user'),
+            $this->crudPermissions('role'),
+        );
+        foreach ($administrationPermissions as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
         // Sensitive evidence-pack export is deliberately NOT part of ordinary coordinator roles.
         Permission::findOrCreate('guided.evidence_pack.export_sensitive', 'web');
         // Global system/template administration is never granted to ordinary coordinators.
@@ -100,10 +109,11 @@ class IsoRolePermissionSeeder extends Seeder
             }
         }
 
-        Role::findOrCreate('super_admin', 'web')->givePermissionTo(array_merge($allPermissions, [
-            'guided.evidence_pack.export_sensitive', 'guided.system.manage_all',
-            'guided.template.manage_global',
-        ]));
+        Role::findOrCreate(config('filament-shield.super_admin.name', 'super_admin'), 'web')
+            ->givePermissionTo(array_merge($allPermissions, $administrationPermissions, [
+                'guided.evidence_pack.export_sensitive', 'guided.system.manage_all',
+                'guided.template.manage_global',
+            ]));
     }
 
     private function crudPermissions(string $entity): array
