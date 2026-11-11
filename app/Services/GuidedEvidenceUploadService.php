@@ -52,6 +52,14 @@ class GuidedEvidenceUploadService
             ->with(['assessment', 'question'])
             ->findOrFail($assignment->id);
         $run = $assignment->assessment;
+        if ($assignment->user_id !== $actor->id
+            || ! $actor->can('guided.answer.submit')
+            || ! $run->isMember($actor, ['respondent'])) {
+            throw ValidationException::withMessages([
+                'authorization' => 'Hanya responden yang ditugaskan yang dapat mengunggah bukti.',
+            ]);
+        }
+
         if ($run->locked_at
             || in_array($run->status, ['locked', 'closed'], true)
             || ! in_array($assignment->status, ['assigned', 'in_progress', 'submitted'], true)
