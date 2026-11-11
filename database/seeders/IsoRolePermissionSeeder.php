@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -10,6 +11,11 @@ class IsoRolePermissionSeeder extends Seeder
 {
     public function run(): void
     {
+        // A first-time seeding must not lock out accounts which were permitted
+        // into the panel before the portal.access gate existed.
+        $hadPortalAccessGate = Permission::query()->where('guard_name', 'web')
+            ->where('name', 'portal.access')->exists();
+
         $workflowPermissions = [
             'portal.access',
             'guided.bank.manage','guided.template.manage','guided.assessment.view','guided.assessment.manage','guided.answer.submit',
@@ -42,10 +48,43 @@ class IsoRolePermissionSeeder extends Seeder
         // Global system/template administration is never granted to ordinary coordinators.
         Permission::findOrCreate('guided.system.manage_all', 'web');
         Permission::findOrCreate('guided.template.manage_global', 'web');
+        // Filament Shield RolePolicy checks role CRUD permissions; these are
+        // privileged operations and must never be granted to regular templates.
+        $roleAdministrationPermissions = $this->crudPermissions('role');
+        foreach ($roleAdministrationPermissions as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
+        if (! $hadPortalAccessGate || config('iso-km.role_seeder_backfill_existing_user_access', false)) {
+            User::query()->orderBy('id')->chunkById(250, function ($users): void {
+                foreach ($users as $user) {
+                    $user->givePermissionTo('portal.access');
+                }
+            });
+        }
+
+        // A coordinator can administer assigned assessments, not every ISO
+        // master register nor the separate evidence/risk/management approvals.
+        $coordinatorPermissions = array_merge([
+            'portal.access', 'guided.assessment.view', 'guided.assessment.manage',
+            'guided.answer.submit', 'guided.consolidate', 'guided.report.export',
+            'guided.template.manage',
+        ],
+            $this->readPermissions('standard'),
+            $this->readPermissions('requirement'),
+            $this->readPermissions('control'),
+            $this->readPermissions('compliance::scope'),
+            $this->readPermissions('management::system'),
+            $this->readPermissions('requirement::assessment'),
+            $this->readPermissions('statement::of::applicability'),
+            $this->readPermissions('evidence'),
+            $this->readPermissions('risk'),
+            $this->readPermissions('action::item'),
+        );
 
         $templates = [
             'iso_manager' => $allPermissions,
-            'iso_coordinator' => $allPermissions,
+            'iso_coordinator' => $coordinatorPermissions,
             'document_controller' => array_merge(
                 ['portal.access'],$crudByEntity['document'],$crudByEntity['evidence'],$crudByEntity['evidence::schedule'],$this->readPermissions('evidence::request'),$this->readPermissions('action::item'),
                 ['guided.evidence.review','document.submit_review','document.review','document.review_any','document.make_effective','document.obsolete','evidence.manage','evidence.verify','evidence_request.view_all','activity_log.view']
@@ -85,25 +124,71 @@ class IsoRolePermissionSeeder extends Seeder
                 ['guided.assessment.view','guided.answer.submit','document.acknowledge','training.complete']
             ),
             'external_auditor' => ['portal.access','external_auditor_workspace.view','external_audit_pack.export'],
+            // Guided assessment's role membership is assigned separately per run.
+            // These are least-privilege permission presets, not global sign-off.
+            'guided_respondent' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.answer.submit'],
+                $this->readPermissions('action::item'),
+            ),
+            'guided_consolidator' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.consolidate'],
+                $this->readPermissions('action::item'),
+            ),
+            'guided_evidence_reviewer' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.evidence.review'],
+                $this->readPermissions('evidence'),
+                $this->readPermissions('action::item'),
+            ),
+            'guided_assessor' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.assessment.review', 'guided.evidence.review'],
+                $this->readPermissions('evidence'),
+                $this->readPermissions('requirement::assessment'),
+                $this->readPermissions('statement::of::applicability'),
+                $this->readPermissions('action::item'),
+            ),
+            'guided_risk_owner' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.risk.approve'],
+                $this->readPermissions('risk'),
+                $this->readPermissions('action::item'),
+            ),
+            'guided_management_approver' => array_merge(
+                ['portal.access', 'guided.assessment.view', 'guided.management.approve'],
+                $this->readPermissions('assurance::snapshot'),
+                $this->readPermissions('action::item'),
+            ),
         ];
 
-        // Existing role permissions may have been customized for production.
-        // Do not erase those changes when adding the new Guided Assessment feature.
+        // Existing role permissions may be intentionally customized. Never
+        // revoke them silently, and do not grant a full template baseline to
+        // an existing role unless an administrator explicitly opts in.
+        $reconcileExisting = (bool) config('iso-km.role_seeder_reconcile_existing', false);
         $guidedPermissions = array_filter($workflowPermissions, fn (string $p) => str_starts_with($p, 'guided.'));
         foreach ($templates as $roleName => $rolePermissions) {
             $role = Role::findOrCreate($roleName, 'web');
             $grants = array_values(array_unique($rolePermissions));
             if ($role->wasRecentlyCreated) {
                 $role->syncPermissions($grants);
-            } else {
-                $role->givePermissionTo(array_values(array_intersect($grants, $guidedPermissions)));
+                continue;
+            }
+
+            $additions = $reconcileExisting
+                ? $grants
+                : array_values(array_intersect($grants, array_merge(['portal.access'], $guidedPermissions)));
+            $role->givePermissionTo($additions);
+
+            if ($roleName === 'iso_coordinator'
+                && $role->hasPermissionTo('delete_standard')) {
+                $this->command?->warn('iso_coordinator masih memiliki izin administratif lama. '
+                    .'Seeder sengaja tidak mencabut izin existing; audit dan cabut melalui Shield jika tidak dibutuhkan.');
             }
         }
 
-        Role::findOrCreate('super_admin', 'web')->givePermissionTo(array_merge($allPermissions, [
-            'guided.evidence_pack.export_sensitive', 'guided.system.manage_all',
-            'guided.template.manage_global',
-        ]));
+        Role::findOrCreate('super_admin', 'web')->givePermissionTo(array_merge(
+            $allPermissions,
+            $roleAdministrationPermissions,
+            ['guided.evidence_pack.export_sensitive', 'guided.system.manage_all',
+                'guided.template.manage_global'],
+        ));
     }
 
     private function crudPermissions(string $entity): array
