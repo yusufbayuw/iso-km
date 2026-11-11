@@ -12,6 +12,8 @@ class CorrectiveActionWorkflowService
 {
     public function submitForVerification(CorrectiveAction $action, User $actor): void
     {
+        // Newly created Eloquent instances may not have loaded DB defaults.
+        $action = $action->fresh() ?? $action;
         if ((int) $action->owner_id !== (int) $actor->id && ! $actor->can('capa.manage')) {
             throw ValidationException::withMessages(['authorization' => 'Anda tidak berwenang menyerahkan tindakan perbaikan ini.']);
         }
@@ -34,6 +36,7 @@ class CorrectiveActionWorkflowService
 
     public function verify(CorrectiveAction $action, User $actor, bool $effective, string $notes): void
     {
+        $action = $action->fresh() ?? $action;
         if (! $actor->can('capa.verify')) {
             throw ValidationException::withMessages(['authorization' => 'Anda tidak memiliki kewenangan verifikasi CAPA.']);
         }
