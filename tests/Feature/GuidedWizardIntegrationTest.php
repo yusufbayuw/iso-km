@@ -143,6 +143,20 @@ class GuidedWizardIntegrationTest extends TestCase
         $zip->close();
     }
 
+    public function test_native_filament_wizard_and_print_report_render_for_authorized_user(): void
+    {
+        extract($this->prepare());
+        Permission::findOrCreate('portal.access', 'web');
+        $actor->givePermissionTo('portal.access');
+        app(GuidedWizardDraftService::class)->start($actor, $system->id, 'Rendered assessment');
+        $this->get(StartAssessment::getUrl())->assertOk()
+            ->assertSee('Mulai / Lanjutkan Asesmen')
+            ->assertSee('Rendered assessment');
+        $run = \App\Models\GuidedAssessment::query()->firstOrFail();
+        $this->get(route('guided.assessment.print', ['assessment' => $run->id]))
+            ->assertOk()->assertSee('DRAFT')->assertSee('Rendered assessment');
+    }
+
     public function test_wizard_respects_default_off_and_system_ownership(): void
     {
         extract($this->prepare());
