@@ -11,7 +11,7 @@
             @endif
 
             @if ($this->run && count($this->systems))
-                <div class="flex justify-end">
+                <div class="mt-4 flex justify-end">
                     <x-filament::button color="gray" icon="heroicon-o-plus" wire:click="newAssessment">
                         Asesmen Baru
                     </x-filament::button>
@@ -168,7 +168,7 @@
                             <x-slot name="heading">Konteks Jawaban</x-slot>
                             <form wire:submit="openContext" class="space-y-6">
                                 {{ $this->contextForm }}
-                                <div class="flex justify-end">
+                                <div class="mt-5 flex justify-end">
                                     <x-filament::button type="submit" color="gray" size="sm" icon="heroicon-o-folder-open">
                                         Buka Konteks
                                     </x-filament::button>
@@ -240,7 +240,7 @@
                 @if ($coordinator && ! $run->locked_at)
                     <form wire:submit="saveScopeItem" class="space-y-6">
                         {{ $this->scopeForm }}
-                        <div class="flex justify-end">
+                        <div class="mt-5 flex justify-end">
                             <x-filament::button type="submit" icon="heroicon-o-plus">
                                 Tambah ke Inventaris
                             </x-filament::button>
@@ -305,7 +305,7 @@
                         </x-slot>
                         <form wire:submit="delegate" class="space-y-6">
                             {{ $this->delegateForm }}
-                            <div class="flex justify-end">
+                            <div class="mt-5 flex justify-end">
                                 <x-filament::button type="submit" icon="heroicon-o-user-plus">
                                     Tugaskan Kontributor
                                 </x-filament::button>
