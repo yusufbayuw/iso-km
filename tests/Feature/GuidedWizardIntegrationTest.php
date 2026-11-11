@@ -36,7 +36,7 @@ class GuidedWizardIntegrationTest extends TestCase
         config()->set('iso-km.guided_wizard_enabled', true);
     }
 
-    private function prepare(): array
+    private function prepare(bool $publishBank = true): array
     {
         $this->seed(Iso27001GuidedStarterSeeder::class);
         foreach (['guided.bank.manage', 'guided.assessment.manage',
@@ -59,7 +59,9 @@ class GuidedWizardIntegrationTest extends TestCase
         ]);
         $bank = GuidedQuestionBank::query()->where('standard_id', $standard->id)
             ->where('code', 'ISO27001-2022-WIZARD')->firstOrFail();
-        app(GuidedQuestionBankService::class)->publish($bank, $actor);
+        if ($publishBank) {
+            app(GuidedQuestionBankService::class)->publish($bank, $actor);
+        }
         $this->actingAs($actor);
         return compact('actor', 'standard', 'system', 'bank');
     }
@@ -169,6 +171,29 @@ class GuidedWizardIntegrationTest extends TestCase
         $run = \App\Models\GuidedAssessment::query()->firstOrFail();
         $this->get(route('guided.assessment.print', ['assessment' => $run->id]))
             ->assertOk()->assertSee('DRAFT')->assertSee('Rendered assessment');
+    }
+
+    public function test_start_wizard_shows_draft_bank_blocker_and_reports_error_instead_of_silently_failing(): void
+    {
+        extract($this->prepare(publishBank: false));
+
+        Permission::findOrCreate('portal.access', 'web');
+        $actor->givePermissionTo('portal.access');
+
+        \Livewire\Livewire::test(StartAssessment::class)
+            ->fillForm([
+                'system_id' => $system->id,
+                'name' => 'Belum Ada Bank Terbit',
+            ], 'startForm')
+            ->assertSee('Bank Belum Terbit')
+            ->assertSee('Bank pertanyaan masih Draft')
+            ->call('start')
+            ->assertHasErrors(['startData.system_id'])
+            ->assertSee('Administrator harus memeriksa dan menerbitkan bank terlebih dahulu.');
+
+        $this->assertDatabaseCount('guided_assessments', 0);
+        $this->assertSame('draft', $bank->fresh()->status);
+        $this->assertSame(216, $bank->questions()->count());
     }
 
     public function test_native_forms_can_start_a_run_save_a_draft_and_submit(): void
