@@ -207,7 +207,7 @@ class GuidedStarterWorkbookService
         ];
         $dashboard[1] = str_replace('</row>', $this->formula('B2', 'IFERROR(AVERAGE(Klausul!D2:D31),0)').'</row>', $dashboard[1]);
         $dashboard[2] = str_replace('</row>', $this->formula('B3',
-            'IFERROR((AVERAGE(Organisasi!D2:D38)+AVERAGE(Orang!D2:D9)+AVERAGE(Fisik!D2:D15)+AVERAGE(Teknologi!D2:D35))/4,0)').'</row>', $dashboard[2]);
+            'IFERROR(SUM(Organisasi!D2:D38,Orang!D2:D9,Fisik!D2:D15,Teknologi!D2:D35)/COUNT(Organisasi!D2:D38,Orang!D2:D9,Fisik!D2:D15,Teknologi!D2:D35),0)').'</row>', $dashboard[2]);
         $dashboard[3] = str_replace('</row>', $this->formula('B4', '(B2+B3)/2').'</row>', $dashboard[3]);
         $sheets['Dashboard'] = $this->sheet($dashboard);
 
@@ -233,7 +233,9 @@ class GuidedStarterWorkbookService
                 .'<sheets>'.$sheetParts.'</sheets><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>');
             $zip->addFromString('xl/_rels/workbook.xml.rels',
                 '<?xml version="1.0" encoding="UTF-8"?>'
-                .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.$rels.'</Relationships>');
+                .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.$rels
+                .'<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+                .'</Relationships>');
             $zip->addFromString('_rels/.rels',
                 '<?xml version="1.0" encoding="UTF-8"?>'
                 .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
