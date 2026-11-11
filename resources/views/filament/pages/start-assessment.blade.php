@@ -28,11 +28,13 @@
             </x-slot>
 
             @if (count($this->systems))
-                <form wire:submit="start" class="space-y-5">
-                    {{ $this->startForm }}
+                <form wire:submit="start" class="space-y-6">
+                    <div class="pb-2">
+                        {{ $this->startForm }}
+                    </div>
 
                     @if ($this->bankReadiness)
-                        <div class="rounded-lg border p-4 {{ $this->bankReadiness['ready'] ? 'border-success-300 bg-success-50 dark:border-success-700 dark:bg-success-950/30' : 'border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950/30' }}">
+                        <div class="mt-6 rounded-lg border p-4 {{ $this->bankReadiness['ready'] ? 'border-success-300 bg-success-50 dark:border-success-700 dark:bg-success-950/30' : 'border-warning-300 bg-warning-50 dark:border-warning-700 dark:bg-warning-950/30' }}">
                             <div class="mb-2 flex flex-wrap items-center gap-2">
                                 <x-filament::badge :color="$this->bankReadiness['ready'] ? 'success' : 'warning'">
                                     {{ $this->bankReadiness['ready'] ? 'Bank Siap Digunakan' : 'Bank Belum Terbit' }}
@@ -58,10 +60,10 @@
                     @endif
 
                     @error('startData.system_id')
-                        <p class="text-sm text-danger-600 dark:text-danger-400" role="alert">{{ $message }}</p>
+                        <p class="mt-3 text-sm text-danger-600 dark:text-danger-400" role="alert">{{ $message }}</p>
                     @enderror
 
-                    <div class="flex flex-wrap items-center justify-end gap-3">
+                    <div class="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
                         <span wire:loading wire:target="start" class="text-sm text-gray-500 dark:text-gray-400" role="status">
                             Memeriksa bank dan membuat penugasan...
                         </span>
@@ -164,7 +166,7 @@
                     @if ($this->currentAssignment && ! $run->locked_at)
                         <x-filament::section>
                             <x-slot name="heading">Konteks Jawaban</x-slot>
-                            <form wire:submit="openContext" class="space-y-4">
+                            <form wire:submit="openContext" class="space-y-6">
                                 {{ $this->contextForm }}
                                 <div class="flex justify-end">
                                     <x-filament::button type="submit" color="gray" size="sm" icon="heroicon-o-folder-open">
@@ -236,7 +238,7 @@
                 </x-slot>
 
                 @if ($coordinator && ! $run->locked_at)
-                    <form wire:submit="saveScopeItem" class="space-y-4">
+                    <form wire:submit="saveScopeItem" class="space-y-6">
                         {{ $this->scopeForm }}
                         <div class="flex justify-end">
                             <x-filament::button type="submit" icon="heroicon-o-plus">
@@ -301,7 +303,7 @@
                         <x-slot name="description">
                             Pilih pengguna yang memiliki izin menjawab, lalu tentukan pertanyaan atau tugaskan seluruh pertanyaan awal.
                         </x-slot>
-                        <form wire:submit="delegate" class="space-y-4">
+                        <form wire:submit="delegate" class="space-y-6">
                             {{ $this->delegateForm }}
                             <div class="flex justify-end">
                                 <x-filament::button type="submit" icon="heroicon-o-user-plus">
