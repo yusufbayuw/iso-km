@@ -20,6 +20,12 @@ class AuditFinding extends Model
             $systemId = $integrity->auditSystemId($finding->audit_id);
             $integrity->assertCatalogItem($systemId, $finding->requirement_id, 'requirement');
             $integrity->assertCatalogItem($systemId, $finding->control_id, 'control');
+            if ($finding->exists && $finding->isDirty(['audit_id', 'finding_type'])
+                && $finding->correctiveActions()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'finding_type' => 'Jenis dan audit asal finding dengan CAPA tidak dapat diubah.',
+                ]);
+            }
             if ($finding->status === 'closed' && ($finding->isDirty('status') || ! $finding->exists)) {
                 app(CorrectiveActionWorkflowService::class)->assertCanClose($finding);
             }

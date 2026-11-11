@@ -67,7 +67,7 @@ class AuditResource extends Resource
             Tables\Columns\TextColumn::make('leadAuditor.name')->label('Lead Auditor')->placeholder('-'),
             Tables\Columns\TextColumn::make('planned_start_at')->label('Jadwal')->dateTime('d/m/Y H:i')->placeholder('-'),
             Tables\Columns\TextColumn::make('findings_count')->label('Finding')->counts('findings')->alignCenter(),
-        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()]);
+        ])->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()->visible(fn (Audit $record): bool => ! $record->checklistItems()->exists() && ! $record->findings()->exists())]);
     }
 
     public static function getPages(): array { return ['index' => Pages\ManageAudits::route('/')]; }

@@ -63,7 +63,7 @@ class EvidenceResource extends Resource
         ])->actions([
             Tables\Actions\Action::make('verify')->label('Verify')->icon('heroicon-o-shield-check')->color('success')->visible(fn (Evidence $record): bool => $record->verification_status !== 'verified' && (auth()->user()?->can('evidence.verify') ?? false))->form([Forms\Components\Textarea::make('notes')->label('Catatan Verifikasi')])->requiresConfirmation()->action(fn (Evidence $record, array $data) => app(EvidenceLifecycleService::class)->verifyEvidence($record, auth()->user(), $data['notes'] ?? null)),
             Tables\Actions\Action::make('reject')->label('Reject')->icon('heroicon-o-x-circle')->color('danger')->visible(fn (Evidence $record): bool => $record->verification_status !== 'rejected' && (auth()->user()?->can('evidence.verify') ?? false))->form([Forms\Components\Textarea::make('notes')->label('Alasan')->required()])->requiresConfirmation()->action(fn (Evidence $record, array $data) => app(EvidenceLifecycleService::class)->rejectEvidence($record, auth()->user(), $data['notes'])),
-            Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make(),
+            Tables\Actions\EditAction::make(), // Evidence bersejarah diarsipkan, bukan dihapus.
         ]);
     }
 

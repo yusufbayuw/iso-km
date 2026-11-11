@@ -28,6 +28,11 @@ class Audit extends Model
                 $audit->actual_start_at ??= now();
             }
         });
+        static::deleting(function (self $audit): void {
+            if ($audit->findings()->exists() || $audit->checklistItems()->exists()) {
+                throw ValidationException::withMessages(['audit' => 'Audit yang memiliki checklist/finding tidak dapat dihapus.']);
+            }
+        });
     }
 
     protected $fillable = ['management_system_id','code','title','type','status','lead_auditor_id','planned_start_at','planned_end_at','actual_start_at','actual_end_at','scope','objectives','criteria','summary'];
