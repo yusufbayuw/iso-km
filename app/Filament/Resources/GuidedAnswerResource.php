@@ -48,13 +48,13 @@ class GuidedAnswerResource extends Resource
                     Forms\Components\Toggle::make('all_contexts')->label('Gabungkan lintas sistem/aset/konteks')
                         ->helperText('Aktifkan jika kesimpulan mewakili lebih dari satu konteks. Jawaban asli tetap disimpan.')
                         ->live()->default(false),
-                    Forms\Components\Select::make('source_ids')->label('Jawaban Sumber')->multiple()->searchable()->required()
-                        ->options(fn (GuidedAnswer $record, Forms\Get $get) => GuidedAnswer::query()
-                            ->where('guided_assessment_id', $record->guided_assessment_id)
-                            ->where('guided_question_id', $record->guided_question_id)
-                            ->when(! $get('all_contexts'), fn ($q) => $q->where('context_key', $record->context_key))
-                            ->with('respondent')->orderBy('id')->get()
-                            ->mapWithKeys(fn (GuidedAnswer $a) => [$a->id => '#'.$a->id.' ['.$a->context_key.'] '.($a->respondent?->name ?? '-').' - '.(string) ($a->response['value'] ?? '')])->all())
+                    Forms\Components\Select::make('source_ids')->label('Jawaban Sumber')->multiple()->searchable()->preload()->required()
+                        ->options(fn (GuidedAnswer $record, Forms\Get $get): array =>
+                            self::sourceAnswerOptions($record, (bool) $get('all_contexts')))
+                        ->getSearchResultsUsing(fn (GuidedAnswer $record, Forms\Get $get, string $search): array =>
+                            self::sourceAnswerOptions($record, (bool) $get('all_contexts'), $search))
+                        ->getOptionLabelsUsing(fn (GuidedAnswer $record, Forms\Get $get, array $values): array =>
+                            self::sourceAnswerOptions($record, (bool) $get('all_contexts'), ids: $values))
                         ->default(fn (GuidedAnswer $record) => [$record->id]),
                     Forms\Components\Textarea::make('summary')->label('Hasil Konsolidasi')->required(),
                     Forms\Components\Textarea::make('reason')->label('Alasan pemilihan dan penggabungan')->required(),
@@ -66,6 +66,29 @@ class GuidedAnswerResource extends Resource
                     Notification::make()->success()->title('Versi konsolidasi baru dibuat')->send();
                 }),
         ]);
+    }
+
+    private static function sourceAnswerOptions(
+        GuidedAnswer $record,
+        bool $allContexts,
+        ?string $search = null,
+        ?array $ids = null
+    ): array {
+        $query = GuidedAnswer::query()
+            ->where('guided_assessment_id', $record->guided_assessment_id)
+            ->where('guided_question_id', $record->guided_question_id)
+            ->when(! $allContexts, fn (Builder $query) => $query->where('context_key', $record->context_key))
+            ->when($ids !== null, fn (Builder $query) => $query->whereIn('id', $ids))
+            ->when(filled($search), fn (Builder $query) => $query->where(fn (Builder $query) => $query
+                ->where('context_key', 'like', '%'.$search.'%')
+                ->orWhereHas('respondent', fn (Builder $user) => $user->where('name', 'like', '%'.$search.'%'))));
+
+        return $query->with('respondent')->orderBy('id')
+            ->limit($ids === null ? 50 : max(1, count($ids)))->get()
+            ->mapWithKeys(fn (GuidedAnswer $answer) => [
+                $answer->id => '#'.$answer->id.' ['.$answer->context_key.'] '
+                    .($answer->respondent?->name ?? '-').' - '.(string) ($answer->response['value'] ?? ''),
+            ])->all();
     }
 
     public static function getPages(): array { return ['index' => Pages\ListGuidedAnswers::route('/')]; }
