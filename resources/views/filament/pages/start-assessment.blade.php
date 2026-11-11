@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @if ($this->runs->isNotEmpty())
     <x-filament::section>
         <x-slot name="heading">Mulai / Lanjutkan Asesmen</x-slot>
         <x-slot name="description">
@@ -19,6 +20,7 @@
             @endif
         </div>
     </x-filament::section>
+    @endif
 
     @if (! $this->run)
         <x-filament::section>
