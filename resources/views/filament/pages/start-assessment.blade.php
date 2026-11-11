@@ -244,7 +244,7 @@
                             </select>
                             <select class="gw-input" wire:model="delegateQuestionId">
                                 <option value="">Seluruh pertanyaan awal</option>
-                                @foreach ($run->bank->questions()->whereDoesntHave('targets', fn ($query) => $query->whereRaw('1=0'))->get(['id','code']) as $candidate)
+                                @foreach ($run->bank->questions()->whereHas('targets')->get(['id','code']) as $candidate)
                                     <option value="{{ $candidate->id }}">{{ $candidate->code }}</option>
                                 @endforeach
                             </select>
