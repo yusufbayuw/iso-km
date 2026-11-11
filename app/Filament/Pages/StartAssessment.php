@@ -630,6 +630,14 @@ class StartAssessment extends Page implements HasForms
     private function saveCurrentSilently(): void
     {
         if (! $this->currentAssignment || $this->run?->locked_at) { return; }
+
+        // Navigation and autosave must not silently discard a file selected
+        // after the last explicit upload/save click.
+        if (filled($this->uploadData['files'] ?? null)) {
+            $this->uploadEvidence();
+            if ($this->getErrorBag()->has('uploadData.files')) { return; }
+        }
+
         try {
             $data = $this->answerForm->getState();
             $draft = app(GuidedWizardDraftService::class)->saveDraft(
