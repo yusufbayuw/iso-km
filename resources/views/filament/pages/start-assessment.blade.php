@@ -202,7 +202,32 @@
                                 {{ $this->answerForm }}
                             </div>
 
-                            <div class="mt-5 flex flex-wrap items-center gap-3">
+                            <div class="mt-6 space-y-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                                <div class="space-y-1">
+                                    <p class="text-sm font-semibold text-gray-950 dark:text-white">Tambahkan Bukti Pendukung</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        Pilih evidence dari daftar di atas, atau unggah file baru di sini.
+                                        Evidence baru otomatis dicatat pada register dan dihubungkan ke Requirement/Kontrol pertanyaan ini.
+                                    </p>
+                                </div>
+                                <div wire:key="wizard-evidence-upload-{{ $questionId }}-{{ md5($contextKey) }}">
+                                    {{ $this->uploadForm }}
+                                </div>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <x-filament::button type="button" color="gray" icon="heroicon-o-paper-clip"
+                                        wire:click="uploadEvidence" wire:loading.attr="disabled" wire:target="uploadEvidence">
+                                        Unggah &amp; Tautkan
+                                    </x-filament::button>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                        File disimpan privat. Status awal: Menunggu verifikasi.
+                                    </span>
+                                </div>
+                                @error('uploadData.files')
+                                    <p class="text-sm text-danger-600 dark:text-danger-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
                                 <x-filament::button color="gray" icon="heroicon-o-cloud-arrow-up" wire:click="saveDraft">
                                     Simpan Draft
                                 </x-filament::button>

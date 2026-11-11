@@ -18,6 +18,7 @@ use App\Models\GuidedScopeItem;
 use App\Models\User;
 use App\Services\GuidedAssessmentWorkflowService;
 use App\Services\GuidedEvidenceAccessService;
+use App\Services\GuidedEvidenceUploadService;
 use App\Services\GuidedSystemAccessService;
 use App\Services\GuidedWizardCompletenessService;
 use App\Services\GuidedWizardDraftService;
@@ -59,6 +60,7 @@ class StartAssessment extends Page implements HasForms
     public ?array $questionPickerData = [];
     public ?array $contextData = [];
     public ?array $answerData = [];
+    public ?array $uploadData = [];
     public ?array $scopeData = [];
     public ?array $delegateData = [];
 
@@ -70,6 +72,7 @@ class StartAssessment extends Page implements HasForms
             'questionPickerForm',
             'contextForm',
             'answerForm',
+            'uploadForm',
             'scopeForm',
             'delegateForm',
         ];
@@ -208,6 +211,28 @@ class StartAssessment extends Page implements HasForms
             ->statePath('answerData')->columns(1);
     }
 
+    public function uploadForm(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\FileUpload::make('files')
+                ->label('Unggah bukti baru')
+                ->helperText('PDF, JPG, PNG, WEBP, DOCX, atau XLSX (maks. 10 MB per file, 5 file sekaligus). Bukti otomatis dicatat pada Evidence Register dan menunggu verifikasi.')
+                ->multiple()
+                ->storeFiles(false)
+                ->disk('local')
+                ->visibility('private')
+                ->maxFiles(5)
+                ->maxSize(10240)
+                ->acceptedFileTypes([
+                    'application/pdf',
+                    'image/jpeg', 'image/png', 'image/webp',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                ])
+                ->previewable(false),
+        ])->statePath('uploadData')->columns(1);
+    }
+
     public function scopeForm(Form $form): Form
     {
         return $form->schema([
@@ -273,6 +298,7 @@ class StartAssessment extends Page implements HasForms
         $this->questionPickerForm->fill();
         $this->contextForm->fill(['context_key' => 'general']);
         $this->answerForm->fill();
+        $this->uploadForm->fill(['files' => []]);
         $this->scopeForm->fill(['kind' => 'asset']);
         $this->delegateForm->fill();
 
@@ -503,6 +529,7 @@ class StartAssessment extends Page implements HasForms
     public function chooseRun(int $id): void
     {
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $run = $this->visibleRun($id);
         abort_unless($run, 403);
         $this->openRun($run);
@@ -512,6 +539,7 @@ class StartAssessment extends Page implements HasForms
     {
         abort_unless(count($this->systems) > 0, 403);
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $this->runId = null;
         $this->stage = 'overview';
         $this->questionId = null;
@@ -522,12 +550,14 @@ class StartAssessment extends Page implements HasForms
         $this->questionPickerForm->fill();
         $this->contextForm->fill(['context_key' => 'general']);
         $this->answerForm->fill();
+        $this->uploadForm->fill(['files' => []]);
     }
 
     public function chooseQuestion(int $questionId): void
     {
         if (! $this->assignments->contains('guided_question_id', $questionId)) { abort(403); }
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $this->questionId = $questionId;
         unset($this->currentAssignment, $this->evidenceChoices);
         $this->questionPickerForm->fill(['question_id' => $questionId]);
@@ -550,6 +580,7 @@ class StartAssessment extends Page implements HasForms
     public function openContext(): void
     {
         $this->saveCurrentSilently();
+        if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
         $data = $this->contextForm->getState();
         $context = trim($data['context_key']);
         if ($context === '*' || $context === '') {
@@ -597,11 +628,20 @@ class StartAssessment extends Page implements HasForms
             'notes' => $notes,
             'evidence_ids' => $evidenceIds,
         ]);
+        $this->uploadForm->fill(['files' => []]);
     }
 
     private function saveCurrentSilently(): void
     {
         if (! $this->currentAssignment || $this->run?->locked_at) { return; }
+
+        // Navigation and autosave must not silently discard a file selected
+        // after the last explicit upload/save click.
+        if (filled($this->uploadData['files'] ?? null)) {
+            $this->uploadEvidence();
+            if ($this->getErrorBag()->has('uploadData.files')) { return; }
+        }
+
         try {
             $data = $this->answerForm->getState();
             $draft = app(GuidedWizardDraftService::class)->saveDraft(
@@ -619,10 +659,63 @@ class StartAssessment extends Page implements HasForms
         }
     }
 
+    public function uploadEvidence(): void
+    {
+        $assignment = $this->currentAssignment;
+        abort_unless($assignment && ! $this->run?->locked_at, 403);
+
+        $files = $this->uploadForm->getState()['files'] ?? [];
+        if (! is_array($files) || count($files) === 0) {
+            Notification::make()->warning()->title('Pilih file bukti terlebih dahulu')->send();
+            return;
+        }
+
+        try {
+            $answer = $this->answerForm->getState();
+            $draft = app(GuidedEvidenceUploadService::class)->uploadAndAttach(
+                $assignment,
+                auth()->user(),
+                $this->contextKey,
+                isset($answer['value']) ? (string) $answer['value'] : null,
+                $answer['notes'] ?? null,
+                $answer['evidence_ids'] ?? [],
+                $this->draftVersion,
+                $files,
+            );
+
+            $this->draftVersion = $draft->version;
+            $this->resetValidation('uploadData.files');
+            $this->saveMessage = 'Draft dan bukti tersimpan: '.now()->format('H:i:s');
+            $this->answerForm->fill([
+                'value' => $answer['value'] ?? null,
+                'notes' => $answer['notes'] ?? null,
+                'evidence_ids' => $draft->evidence_ids ?? [],
+            ]);
+            $this->uploadForm->fill(['files' => []]);
+            unset($this->evidenceChoices);
+
+            Notification::make()->success()
+                ->title(count($files).' bukti terunggah dan terhubung ke draft')
+                ->body('Evidence tercatat otomatis dan menunggu verifikasi.')
+                ->send();
+        } catch (ValidationException $exception) {
+            $message = (string) (collect($exception->errors())->flatten()->first() ?? $exception->getMessage());
+            $this->addError('uploadData.files', $message);
+            Notification::make()->danger()->title('Upload bukti gagal')->body($message)->send();
+        }
+    }
+
     public function saveDraft(): void
     {
         if (! $this->currentAssignment) { return; }
         $this->resetErrorBag();
+
+        // Saving or submitting also registers any newly selected upload, so
+        // users do not accidentally submit a draft with missing attachments.
+        if (filled($this->uploadData['files'] ?? null)) {
+            $this->uploadEvidence();
+            if ($this->getErrorBag()->isNotEmpty()) { return; }
+        }
         $this->saveCurrentSilently();
         if (! $this->getErrorBag()->isNotEmpty()) {
             Notification::make()->success()->title('Draft tersimpan')->send();
@@ -682,7 +775,10 @@ class StartAssessment extends Page implements HasForms
     public function showStage(string $stage): void
     {
         abort_unless(in_array($stage, ['questions', 'context', 'review', 'results'], true), 404);
-        if ($this->stage === 'questions') { $this->saveCurrentSilently(); }
+        if ($this->stage === 'questions') {
+            $this->saveCurrentSilently();
+            if ($this->getErrorBag()->has('uploadData.files') || $this->getErrorBag()->has('draft')) { return; }
+        }
         $this->stage = $stage;
     }
 

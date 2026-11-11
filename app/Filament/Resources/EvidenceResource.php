@@ -30,7 +30,7 @@ class EvidenceResource extends Resource
             Forms\Components\TextInput::make('source')->label('Sumber')->placeholder('Sistem, unit, vendor, atau proses'),
             Forms\Components\Select::make('confidentiality')->label('Klasifikasi')->options(['public' => 'Publik','internal' => 'Internal','confidential' => 'Rahasia','restricted' => 'Terbatas'])->default('internal')->required(),
             Forms\Components\Select::make('owner_id')->label('Owner')->relationship('owner', 'name')->searchable()->preload(),
-            Forms\Components\FileUpload::make('file_path')->label('File')->directory('iso/evidence')->downloadable()->openable(),
+            Forms\Components\FileUpload::make('file_path')->label('File')->disk('local')->directory('iso/evidence')->visibility('private')->downloadable()->openable(),
             Forms\Components\TextInput::make('external_url')->label('URL Eksternal')->url(),
             Forms\Components\DatePicker::make('captured_at')->label('Tanggal Evidence')->native(false),
             Forms\Components\DatePicker::make('valid_from')->label('Valid Sejak')->native(false),
