@@ -28,11 +28,24 @@ class CorrectiveAction extends Model
             }
         });
         static::saving(function (self $action): void {
-            if ($action->exists && $action->status === 'completed'
-                && $action->isDirty(['action', 'owner_id', 'due_date', 'audit_finding_id'])) {
-                throw ValidationException::withMessages(['status' => 'CAPA terverifikasi tidak dapat diubah; buat tindakan baru jika perlu revisi.']);
+            if (! $action->exists) {
+                return;
+            }
+            if ($action->getRawOriginal('status') === 'completed' && $action->isDirty()) {
+                throw ValidationException::withMessages([
+                    'status' => 'CAPA yang telah diverifikasi bersifat final. Buat tindakan baru untuk revisi.',
+                ]);
+            }
+            if ($action->getRawOriginal('status') === 'verification'
+                && $action->isDirty(['owner_id', 'audit_finding_id', 'action'])) {
+                throw ValidationException::withMessages([
+                    'owner_id' => 'PIC dan isi pekerjaan yang sedang diverifikasi tidak boleh diubah.',
+                ]);
             }
         });
+        static::deleting(fn (self $action) => throw ValidationException::withMessages([
+            'status' => 'Histori CAPA tidak boleh dihapus. Gunakan tindakan lanjutan untuk koreksi.',
+        ]));
         static::saved(function (self $action): void {
             if ($action->audit_finding_id) {
                 app(CorrectiveActionWorkflowService::class)->syncFinding($action->finding);
